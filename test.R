@@ -1,0 +1,204 @@
+# install.packages("msm")
+library(msm)
+library(tidyverse)
+library(lubridate)
+library(splines)
+hrs <- read_csv("riffe_incdem_20250522.csv")
+
+
+
+# first pass processing
+hrs_msm <-
+  hrs |> 
+  filter(between(age,55,97)) |> 
+  mutate(
+    int_date = suppressWarnings(as.integer(int_date)),
+    interview_date = lubridate::as_date(int_date, origin = "1960-01-01"),
+    int_date_decimal = decimal_date(interview_date)
+  ) |> 
+  arrange(hhidpn, age) |> 
+  # mutate(age_diff = age - (int_date_decimal - decimal_date(as_date(birth_date, origin = "1960-01-01")))) |> 
+  mutate(
+    state_msm = state + 1  # msm expects states starting at 1
+  ) |> 
+  group_by(hhidpn) |> 
+  filter(n() > 1) |> 
+  ungroup()
+
+# al filtering before here; needed to create spline 
+# basis with consistent age range in fit and predictions.
+spline_basis_fit   <- ns(hrs_msm$age, df = 3)
+age_splines        <- as.data.frame(spline_basis_fit)
+names(age_splines) <- paste0("age_spline", 1:3)
+
+hrs_msm <-
+  hrs_msm |> 
+  bind_cols(age_splines) |> 
+  arrange(hhidpn, age) |> group_by(hhidpn) |> 
+  arrange(age) |> 
+  mutate(
+    ever_dementia = cumany(state == 1),
+    state_clean = case_when(
+      state == 2 ~ 2,  # preserve death
+      ever_dementia & state == 0 ~ 1,  # impute "recovery" as still dementia
+      TRUE ~ state
+    )
+  ) |> 
+  ungroup() |> 
+  group_by(hhidpn)  |> 
+  arrange(age) |> 
+  mutate(
+    died = cumany(state_clean == 2)
+  ) %>%
+  filter(!(died & state_clean != 2)) |> 
+  ungroup() |> 
+  arrange(hhidpn,age) |> 
+  # treat death times as exact, but othe transition
+  # times as unknown.
+  mutate(obstype = ifelse(state_msm == 3,3,1))
+
+
+
+Q <- rbind(
+  c(0, 0.1, 0.1),  # healthy can go to dementia or death
+  c(0, 0,   0.1),  # dementia can go to death
+  c(0, 0,   0)     # death is absorbing
+)
+diag(Q) <- -rowSums(Q)
+
+# fit separate models to males and females
+# since there is no by argument in msm...
+model_msm_female <- msm(
+  state_msm ~ age,
+  subject = hhidpn,
+  data = filter(hrs_msm, female == 1),
+  qmatrix = Q,
+  obstype = obstype,
+  deathexact = 3,
+  covariates = ~ age_spline1 + age_spline2 + age_spline3 + int_date_decimal,
+  control = list(fnscale = 5000, maxit = 20000),
+  gen.inits = TRUE,
+  method = "BFGS"
+)
+
+model_msm_male <- msm(
+  state_msm ~ age,
+  subject = hhidpn,
+  data = filter(hrs_msm, female == 0),
+  qmatrix = Q,
+  obstype = obstype,
+  deathexact = 3,
+  covariates = ~ age_spline1 + age_spline2 + age_spline3 + int_date_decimal,
+  control = list(fnscale = 5000, maxit = 20000),
+  gen.inits = TRUE,
+  method = "BFGS"
+)
+model_msm_female$opt$convergence
+model_msm_male$opt$convergence
+model_msm_female$sojourn
+model_msm_male$sojourn
+
+
+# stick together to pass in
+models <- list(Male = model_msm_male,
+               Female = model_msm_female)
+
+
+prediction_grid <- crossing(
+  sex = c("Male", "Female"),
+  age = seq(50, 100, by = 0.25),
+  int_date_decimal = c(2000, 2010, 2020)
+)
+spline_basis <- predict(spline_basis_fit, 
+                        newx = prediction_grid$age) %>%
+  as.data.frame() %>%
+  setNames(paste0("age_spline", 1:3))
+prediction_grid <- bind_cols(prediction_grid, spline_basis)
+
+  
+# custom function to predict haz and prob for our grid.
+# this also lacks time still. Note we pass in models
+# rather than counting on up-scoping.
+
+predict_hazard_and_prob <- function(.x, .y, age_interval = 0.25, models) {
+  model <- models[[.y$sex]]
+  
+  covariates_row <- .x %>%
+    select(starts_with("age_spline")) %>%
+    slice(1) %>%
+    as.list()
+  names(covariates_row) <- c(paste0("age_spline", 1:3))
+  covariates_row$int_date_decimal <- .y$int_date_decimal
+  
+  
+  qmat <- qmatrix.msm(model, covariates = covariates_row)$estimates
+  pmat <- pmatrix.msm(model, t = age_interval, covariates = covariates_row)
+  
+  left_join(
+    as.data.frame(as.table(qmat)) %>% rename(from = Var1, to = Var2, rate = Freq),
+    as.data.frame(as.table(pmat)) %>% rename(from = Var1, to = Var2, prob = Freq),
+    by = c("from", "to")
+  )
+}
+
+# example code to execute above function on data
+result_df <- prediction_grid |> 
+  group_by(sex, age, int_date_decimal) |> 
+  group_modify(~predict_hazard_and_prob(.x,
+                                        .y,
+                                        age_interval = .25,
+                                        models = models)) |> 
+  ungroup()
+
+
+# some ad hoc visualization code
+result_df %>%
+  mutate(from = from |> as.character() |> parse_number(),
+         to =  to |> as.character() |> parse_number(),
+         transition = paste(from, "→", to)) |> 
+  filter(to > from, prob > 0) |> 
+ggplot(aes(x = age, 
+           y = rate, 
+           color = transition, 
+           linetype = as.factor(int_date_decimal))) +
+  geom_line(linewidth = 1) +
+  labs(
+    title = "Estimated Transition Hazards by Age",
+    subtitle = "*Linear time trend",
+    x = "Age",
+    y = "Hazard Rate",
+    color = "Transition"
+  ) +
+  theme_minimal() +
+  scale_y_log10() +
+  facet_wrap(~sex)
+
+result_df %>%
+  mutate(from = from |> as.character() |> parse_number(),
+         to =  to |> as.character() |> parse_number(),
+         transition = paste(from, "→", to)) |> 
+  filter(to==2,from==1) |> 
+  ggplot(aes(x = age, 
+             y = rate, 
+             color = as.factor(int_date_decimal), 
+             linetype = sex)) +
+  geom_line(linewidth = 1) +
+  labs(
+    title = "Estimated Transition Hazards by Age",
+    subtitle = "*Linear time trend",
+    x = "Age",
+    y = "Hazard Rate",
+    color = "Transition"
+  ) +
+  theme_minimal() +
+  scale_y_log10() 
+# check support; this was used to determine which age range
+# to fit over. Reason: spline tail misbehaves in young ages
+# if all ages are considered.
+hrs_msm %>%
+  filter(state_clean == 2) %>%
+  count(age_int = floor(age)) %>%
+  ggplot(aes(x = age_int, y = n)) +
+  geom_col() +
+  labs(title = "Number of Observations in Dementia by Age",
+       x = "Age", y = "Count")
