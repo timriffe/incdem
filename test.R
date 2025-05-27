@@ -49,7 +49,7 @@ hrs_msm <-
   arrange(age) |> 
   mutate(
     died = cumany(state_clean == 2)
-  ) %>%
+  ) |>
   filter(!(died & state_clean != 2)) |> 
   ungroup() |> 
   arrange(hhidpn,age) |> 
@@ -110,8 +110,8 @@ prediction_grid <- crossing(
   int_date_decimal = c(2000, 2010, 2020)
 )
 spline_basis <- predict(spline_basis_fit, 
-                        newx = prediction_grid$age) %>%
-  as.data.frame() %>%
+                        newx = prediction_grid$age) |>
+  as.data.frame() |>
   setNames(paste0("age_spline", 1:3))
 prediction_grid <- bind_cols(prediction_grid, spline_basis)
 
@@ -119,26 +119,41 @@ prediction_grid <- bind_cols(prediction_grid, spline_basis)
 # custom function to predict haz and prob for our grid.
 # this also lacks time still. Note we pass in models
 # rather than counting on up-scoping.
-
-predict_hazard_and_prob <- function(.x, .y, age_interval = 0.25, models) {
+#' @param .x a row of data excluding key variables
+#' @param .y a row of key variables
+#' @param age_interval same as time interval, default .25 (quarters)
+#' @param models list with elements "Male" and "Female", the fitted msm models.
+predict_hazard_and_prob <- function(.x, 
+                                    .y, 
+                                    age_interval = 0.25, 
+                                    models) {
   model <- models[[.y$sex]]
   
-  covariates_row <- .x %>%
-    select(starts_with("age_spline")) %>%
-    slice(1) %>%
+  covariates_row <- .x |>
+    select(starts_with("age_spline")) |>
+    slice(1) |>
     as.list()
   names(covariates_row) <- c(paste0("age_spline", 1:3))
   covariates_row$int_date_decimal <- .y$int_date_decimal
   
   
-  qmat <- qmatrix.msm(model, covariates = covariates_row)$estimates
-  pmat <- pmatrix.msm(model, t = age_interval, covariates = covariates_row)
+  qmat <- qmatrix.msm(model, 
+                      covariates = covariates_row)$estimates |> 
+    as.table() |> 
+    as.data.frame() |> 
+    rename(from = Var1, to = Var2, rate = Freq)
+  
+  pmat <- pmatrix.msm(model, 
+                      t = age_interval, 
+                      covariates = covariates_row) |> 
+    as.table() |> 
+    as.data.frame() |> 
+    rename(from = Var1, to = Var2, prob = Freq)
   
   left_join(
-    as.data.frame(as.table(qmat)) %>% rename(from = Var1, to = Var2, rate = Freq),
-    as.data.frame(as.table(pmat)) %>% rename(from = Var1, to = Var2, prob = Freq),
-    by = c("from", "to")
-  )
+    qmat,
+    pmat,
+    by = join_by(from,to))
 }
 
 # example code to execute above function on data
@@ -152,7 +167,7 @@ result_df <- prediction_grid |>
 
 
 # some ad hoc visualization code
-result_df %>%
+result_df |>
   mutate(from = from |> as.character() |> parse_number(),
          to =  to |> as.character() |> parse_number(),
          transition = paste(from, "→", to)) |> 
@@ -173,7 +188,7 @@ ggplot(aes(x = age,
   scale_y_log10() +
   facet_wrap(~sex)
 
-result_df %>%
+result_df |>
   mutate(from = from |> as.character() |> parse_number(),
          to =  to |> as.character() |> parse_number(),
          transition = paste(from, "→", to)) |> 
@@ -195,9 +210,9 @@ result_df %>%
 # check support; this was used to determine which age range
 # to fit over. Reason: spline tail misbehaves in young ages
 # if all ages are considered.
-hrs_msm %>%
-  filter(state_clean == 2) %>%
-  count(age_int = floor(age)) %>%
+hrs_msm |>
+  filter(state_clean == 2) |>
+  count(age_int = floor(age)) |>
   ggplot(aes(x = age_int, y = n)) +
   geom_col() +
   labs(title = "Number of Observations in Dementia by Age",
