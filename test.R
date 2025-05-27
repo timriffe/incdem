@@ -10,6 +10,8 @@ hrs <- read_csv("riffe_incdem_20250522.csv")
 # first pass processing
 hrs_msm <-
   hrs |> 
+  # pick age range to fit to, based on plot of support.
+  # if all ages 
   filter(between(age,55,97)) |> 
   mutate(
     int_date = suppressWarnings(as.integer(int_date)),
@@ -22,15 +24,17 @@ hrs_msm <-
     state_msm = state + 1  # msm expects states starting at 1
   ) |> 
   group_by(hhidpn) |> 
-  filter(n() > 1) |> 
+  filter(n() > 1) |> # supposed to remove solitary observations.
   ungroup()
 
-# al filtering before here; needed to create spline 
-# basis with consistent age range in fit and predictions.
+# all filtering before here; needed to create spline 
+# basis with consistent age range in fit and in predictions.
+# spline_basis_fit is also used later for this reason
 spline_basis_fit   <- ns(hrs_msm$age, df = 3)
 age_splines        <- as.data.frame(spline_basis_fit)
 names(age_splines) <- paste0("age_spline", 1:3)
 
+# This second part is supposed to eliminate impossible transitions.
 hrs_msm <-
   hrs_msm |> 
   bind_cols(age_splines) |> 
@@ -58,7 +62,7 @@ hrs_msm <-
   mutate(obstype = ifelse(state_msm == 3,3,1))
 
 
-
+# Q tells msm what the valid transitions are
 Q <- rbind(
   c(0, 0.1, 0.1),  # healthy can go to dementia or death
   c(0, 0,   0.1),  # dementia can go to death
@@ -93,8 +97,14 @@ model_msm_male <- msm(
   gen.inits = TRUE,
   method = "BFGS"
 )
+
+# 0 means it converged
 model_msm_female$opt$convergence
 model_msm_male$opt$convergence
+
+# Looks like female e(50) too high?
+# But not sure how it's calculated;
+# we should compare with our own calcs to be sure.
 model_msm_female$sojourn
 model_msm_male$sojourn
 
@@ -103,7 +113,10 @@ model_msm_male$sojourn
 models <- list(Male = model_msm_male,
                Female = model_msm_female)
 
-
+# For the prediction grid, we need to be careful to give
+# splines matched to age in the same way as in the hrs
+# data above. If we add covariates, then these need to be 
+# accounted for here somehow.
 prediction_grid <- crossing(
   sex = c("Male", "Female"),
   age = seq(50, 100, by = 0.25),
