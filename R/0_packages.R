@@ -1,10 +1,11 @@
 
-cran_packages <- c("tidyverse","splines","msm")
+# whenever we add packages, after installing locally, run renv::snapshot()
+# renv::snapshot()
+
+# renv::restore()
+
 # ------------------------------------------------------------------- #
-# install.packages("msm")
 library(tidyverse)
 library(splines)
 library(msm)
 # ------------------------------------------------------------------- #
-
-# renv::snapshot()
