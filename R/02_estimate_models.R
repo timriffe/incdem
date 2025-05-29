@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------- #
-source("R/1_data_preparation.R")
+source("R/01_data_preparation.R")
 # ------------------------------------------------------------------- #
 # Q tells msm what the valid transitions are
 Q <- rbind(
@@ -24,7 +24,8 @@ split_data <- hrs_msm |>
     covariates = ~ age_spline1 + age_spline2 + age_spline3 + int_date_decimal,
     control    = list(fnscale = 5000, maxit = 20000),
     gen.inits  = TRUE,
-    method     = "BFGS"
+    method     = "BFGS",
+    fixedpars  = TRUE # respect structural 0s in Q
   )))
 # ------------------------------------------------------------------- #
 # Checking the model

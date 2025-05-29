@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------- #
-source("R/1_data_preparation.R")
-source("R/2_estimate_models.R")
+source("R/01_data_preparation.R")
+source("R/02_estimate_models.R")
 # ------------------------------------------------------------------- #
 # set desired age interval
 age_int <- 0.25

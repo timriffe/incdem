@@ -1,7 +1,7 @@
 # previous step
-source("R/1_data_preparation.R")
-source("R/2_estimate_models.R")
-source("R/3_predict_from_models.R")
+source("R/01_data_preparation.R")
+source("R/02_estimate_models.R")
+source("R/03_predict_from_models.R")
 # OR load prepared data
 # load("Data/results.RData")
 # ------------------------------------------------------------------- #
