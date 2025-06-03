@@ -7,7 +7,9 @@ hrs <- read_csv("Data/riffe_incdem_20250522.csv") |>
 
 # ------------------------------------------------------------------- #
 # first pass processing
-hrs_msm <- hrs |>
+# hrs_msm <- hrs_joined |>
+hrs_msm <- 
+  hrs |> 
   # pick age range to fit to, based on plot of support.
   # if all ages 
   filter(between(age, 55, 97)) |> 
