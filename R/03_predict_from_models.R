@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------- #
-source("R/1_data_preparation.R")
-source("R/2_estimate_models.R")
+source("R/01_data_preparation.R")
+source("R/02_estimate_models.R")
 # ------------------------------------------------------------------- #
 # set desired age interval
 age_int <- 0.25
@@ -82,4 +82,5 @@ result_df <- rate |>
   # remove recovery possibility (empty)
   filter(!(from == "State 2" & to == "State 1"))
 # ------------------------------------------------------------------- #
-save(result_df, file = "Data/results.RData")
+# write to csv.gz and not Rdata
+write_csv(result_df, file = "Data/results.csv.gz")
