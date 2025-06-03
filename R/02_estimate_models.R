@@ -11,6 +11,7 @@ diag(Q) <- -rowSums(Q)
 # ------------------------------------------------------------------- #
 # fit separate models to males and females
 # since there is no by argument in msm (TRUE)
+
 split_data <- hrs_msm |>
   group_by(female) |>
   group_nest() |>
@@ -22,10 +23,9 @@ split_data <- hrs_msm |>
     obstype    = obstype,
     deathexact = 3,
     covariates = ~ age_spline1 + age_spline2 + age_spline3 + int_date_decimal,
-    control    = list(fnscale = 5000, maxit = 20000),
+    control    = list(fnscale = 5000, maxit = 25000),
     gen.inits  = TRUE,
-    method     = "BFGS",
-    fixedpars  = TRUE # respect structural 0s in Q
+    method     = "BFGS" 
   )))
 # ------------------------------------------------------------------- #
 # Checking the model

@@ -82,4 +82,5 @@ result_df <- rate |>
   # remove recovery possibility (empty)
   filter(!(from == "State 2" & to == "State 1"))
 # ------------------------------------------------------------------- #
-save(result_df, file = "Data/results.RData")
+# write to csv.gz and not Rdata
+write_csv(result_df, file = "Data/results.csv.gz")

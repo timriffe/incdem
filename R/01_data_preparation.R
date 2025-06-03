@@ -2,7 +2,9 @@
 source("R/00_packages.R")
 # ------------------------------------------------------------------- #
 # Data
-hrs <- read_csv("Data/riffe_incdem_20250522.csv")
+hrs <- read_csv("Data/riffe_incdem_20250522.csv") |> 
+   mutate(hhidpn = sprintf("%09.0f", hhidpn))
+
 # ------------------------------------------------------------------- #
 # first pass processing
 hrs_msm <- hrs |>
@@ -50,13 +52,13 @@ hrs_msm <- hrs_msm |>
   arrange(hhidpn, age) |> 
   # treat death times as exact, but othe transition
   # times as unknown.
-  mutate(obstype = ifelse(state_msm == 3, 3, 1))
+  mutate(obstype = ifelse(state_msm == 3, 3, 1)) |>
 # ------------------------------------------------------------------- #
 # RT: After cleaning we have to remove a solitary obs. one more time
 # 190 persons, they provide no information
-hrs_msm <- hrs_msm |>
   group_by(hhidpn) |> 
   # supposed to remove solitary observations.
   filter(n() > 1) |>
   ungroup()
 # ------------------------------------------------------------------- #
+# end prep
