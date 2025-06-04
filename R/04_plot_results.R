@@ -7,10 +7,14 @@ result_df <- read_csv("Data/results.csv.gz")
 # ------------------------------------------------------------------- #
 # plot rates
 result_df |>
-  mutate(Period = as.factor(int_date_decimal)) |>
+  mutate(to = to |> as.character() |> parse_number(),
+         from = from |> as.character()|> parse_number()) |> 
+  filter(to>from) |> 
+  mutate(Period = as.factor(int_date_decimal),
+         transition = paste0("haz",from,to)) |>
   ggplot(aes(x        = age, 
              y        = rate, 
-             color    = to, 
+             color    = transition, 
              linetype = Period)) +
   geom_line(linewidth = 1) +
   labs(
@@ -22,7 +26,7 @@ result_df |>
   ) +
   theme_minimal() +
   scale_y_log10() +
-  facet_wrap(sex ~ from) + 
+  facet_wrap(~sex) + 
   theme(legend.position = "bottom")
 # ------------------------------------------------------------------- #
 # plot probability
