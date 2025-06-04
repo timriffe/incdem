@@ -25,13 +25,14 @@ impute_age <- function(age, wave){
   age
 }
 # Select necessary variables from main dataset
+max_wave <- 16
 vars <- c("hhidpn", "hhid", "pn", "hacohort", "rabdate", "raddate",
-          paste0("r", 5:16, "iwstat"),
-          paste0("r", 5:16, "iwmid"),
-          paste0("r", 5:16, "hibpe"),
-          paste0("r", 5:16, "diabe"),
-          paste0("r", 5:16, "hearte"),
-          paste0("r", 5:16, "stroke"),
+          paste0("r", 5:max_wave, "iwstat"),
+          paste0("r", 5:max_wave, "iwmid"),
+          paste0("r", 5:max_wave, "hibpe"),
+          paste0("r", 5:max_wave, "diabe"),
+          paste0("r", 5:max_wave, "hearte"),
+          paste0("r", 5:max_wave, "stroke"),
           "ragender", "raracem", "rahispan", "rabyear", "raeduc")
 # hrs_file <- "randhrs1992_2020v2.dta"
 hrs_file <- "randhrs1992_2022v1.dta"
