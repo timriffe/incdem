@@ -25,7 +25,8 @@ impute_age <- function(age, wave){
   age
 }
 # Select necessary variables from main dataset
-max_wave <- 16
+max_wave <- 15
+hrs_file <- if_else(max_wave == 16, "randhrs1992_2022v1.dta","randhrs1992_2020v2.dta")
 vars <- c("hhidpn", "hhid", "pn", "hacohort", "rabdate", "raddate",
           paste0("r", 5:max_wave, "iwstat"),
           paste0("r", 5:max_wave, "iwmid"),
@@ -34,8 +35,7 @@ vars <- c("hhidpn", "hhid", "pn", "hacohort", "rabdate", "raddate",
           paste0("r", 5:max_wave, "hearte"),
           paste0("r", 5:max_wave, "stroke"),
           "ragender", "raracem", "rahispan", "rabyear", "raeduc")
-# hrs_file <- "randhrs1992_2020v2.dta"
-hrs_file <- "randhrs1992_2022v1.dta"
+
 # Load main RAND HRS dataset
 hrs_in <- read_dta(file.path("Data",hrs_file), 
                    encoding = "UTF-8", 
