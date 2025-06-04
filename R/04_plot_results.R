@@ -7,9 +7,11 @@ result_df <- read_csv("Data/results.csv.gz")
 # ------------------------------------------------------------------- #
 # plot rates
 result_df |>
-  filter(parse_number(to) > parse_number(from)) |> 
+  mutate(to = to |> as.character() |> parse_number(),
+         from = from |> as.character()|> parse_number()) |> 
+  filter(to>from) |> 
   mutate(Period = as.factor(int_date_decimal),
-         transition = paste0("haz",parse_number(from),parse_number(to))) |>
+         transition = paste0("haz",from,to)) |>
   ggplot(aes(x        = age, 
              y        = rate, 
              color    = transition, 
