@@ -2,7 +2,9 @@
 source("R/00_packages.R")
 
 impute_age <- function(age, wave){
-  
+  if (all(is.na(age))){
+    return(age)
+  }
   age <-  zoo::na.approx(age, x = wave, na.rm = FALSE)
   if (any(is.na(age))){
     if (is.na(age[1])){
@@ -10,7 +12,7 @@ impute_age <- function(age, wave){
       diffs            <- diff(wave) * 2
       nNAs             <- rle(is.na(age))$lengths[1]
       first_non_NA_age <- age[!is.na(age)][1]
-      subtract_this    <- rev(1:nNAs * diffs[1:nNAs]) 
+      subtract_this    <- diffs[1:nNAs] |> rev() |> cumsum() |> rev()
       age[1:nNAs]      <- first_non_NA_age - subtract_this
     }
     n <- length(age)
@@ -18,7 +20,7 @@ impute_age <- function(age, wave){
       diffs            <- diff(wave) * 2
       nNAs             <- rle(is.na(rev(age)))$lengths[1]
       last_non_NA_age  <- age[!is.na(age)] |> rev() %>% '['(1)
-      add_this         <- (rev(diffs)[1:nNAs] |> rev()) * 1:nNAs
+      add_this         <- diffs[(n-nNAs):(n-1)] |> cumsum()
       age[(n-nNAs+1):n]  <- last_non_NA_age + add_this
     }
   }
@@ -94,6 +96,10 @@ hrs_long <-
     age           = if_else(iwstat == 5, age_death, age_interview),
     int_date      = if_else(iwstat == 5, raddate, iwmid)
   ) |>
+  group_by(hhidpn) |> 
+  mutate(n=n()) |> 
+  ungroup() |> 
+  filter(n > 1) |> 
   arrange(hhidpn, wave) |>
   group_by(hhidpn) |>
   mutate(age_imputed = impute_age(age, wave)) |> 
@@ -104,8 +110,7 @@ hrs_long <-
                 .names = "{.col}_status")) |>
   ungroup()
 
-
-# stata code:
+# stata cage# stata code:
 # * recode 1/2 = 0 (no dementia), 3 = 1 (dementia)
 # recode cogfunction (1/2 = 0) (3 = 1), gen(cog_dementia)
 # 
@@ -200,13 +205,16 @@ hrs_joined <- hrs_long |>
  #          state_test = state,
  #          int_date,
  #          birth_date,
+ #          raddate,
  #          age_death,
- #          iwstat) |>   
+ #          iwstat,
+ #          iwmid) |>   
  #   right_join(hrs_jordan,
  #              by = join_by(hhidpn, wave)) |>    
- #   mutate(age_check = age_test - age_jordan) |>    
- #   # filter(abs(zapsmall(age_check))>.2) 
- #   filter(!is.na(age_orig), abs(age_check)>.1) 
+ #   mutate(age_check = age_test - age_jordan,
+ #          state_check = state_test - state_jordan) |> 
+ #   filter(abs(zapsmall(state_check))>.2) 
+   
 # 
 # 
 # cog |> 
