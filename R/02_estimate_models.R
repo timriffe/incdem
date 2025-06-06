@@ -13,6 +13,13 @@ diag(Q) <- -rowSums(Q)
 # since there is no by argument in msm (TRUE)
 
 split_data <- hrs_msm |>
+  # a test condition to check pandemic effect on mort trend
+  mutate(birth_date   = as_date(birth_date, origin = "1960-01-01"),
+         birth_date_decimal = decimal_date(birth_date),
+         obs_date = birth_date_decimal + age) |> 
+  filter(obs_date < (as_date("2019-jan-01") |> decimal_date())) |> 
+  #filter(obs_date < (as_date("2019-dec-31") |> decimal_date())) |> 
+  # filter(obs_date < (as_date("2020-feb-28") |> decimal_date())) |> 
   group_by(female) |>
   group_nest() |>
   mutate(model = map(data, ~ msm(
