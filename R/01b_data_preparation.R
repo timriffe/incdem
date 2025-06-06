@@ -2,13 +2,13 @@
 source("R/00_packages.R")
 # ------------------------------------------------------------------- #
 # Data
- # hrs <- read_csv("Data/riffe_incdem_20250522.csv") |> 
- #    mutate(hhidpn = sprintf("%09.0f", hhidpn))
+ hrs <- read_csv("Data/riffe_incdem_20250522.csv") |>
+    mutate(hhidpn = sprintf("%09.0f", hhidpn))
 
 # try R-produced hrs file:
 # source("R/01_read_recode_hrs.R")
-hrs <- hrs_joined |> 
-  mutate(age = age_imputed)
+# hrs <- hrs_joined |> 
+#   mutate(age = age_imputed)
 
 # ------------------------------------------------------------------- #
 # first pass processing
@@ -67,5 +67,33 @@ hrs_msm <- hrs_msm |>
   # supposed to remove solitary observations.
   filter(n() > 1) |>
   ungroup()
+# ------------------------------------------------------------------- #
+# here we will work with NA values in the data
+nas <- hrs_msm |>
+  is.na() |>
+  colSums()
+
+# 360 misses in race are legit. 
+# 54 in education too
+# there are 25287 entries with unknown int_date
+# these cases are also missing the health covariate info
+# but they have a state info
+# What should we do with such cases?
+nas[nas > 0]
+# ------------------------------------------------------------------- #
+# Since all health conditions are "ever had" 
+# We can obtain extra 28181 from 99887 missing cases
+# by grouping and filling
+hrs_msm <- hrs_msm |>
+  group_by(hhidpn) |>
+  fill(c(hypertension, diabetes, 
+         heart_disease, stroke),  .direction = "downup") |>
+  ungroup()
+# ------------------------------------------------------------------- #
+# I suggest using newly created obs_date instead of int_date
+hrs_msm |> 
+  filter(!is.na(int_date)) |>  
+  is.na() |> 
+  colSums()
 # ------------------------------------------------------------------- #
 # end prep

@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------- #
-source("R/01_data_preparation.R")
+source("R/01b_data_preparation.R")
 # ------------------------------------------------------------------- #
 # Q tells msm what the valid transitions are
 Q <- rbind(
@@ -11,13 +11,13 @@ diag(Q) <- -rowSums(Q)
 # ------------------------------------------------------------------- #
 # fit separate models to males and females
 # since there is no by argument in msm (TRUE)
-
+# lets use newly created obs_date. We will have more observations
 split_data <- hrs_msm |>
   # a test condition to check pandemic effect on mort trend
-  mutate(birth_date   = as_date(birth_date, origin = "1960-01-01"),
+  mutate(birth_date         = as_date(birth_date, origin = "1960-01-01"),
          birth_date_decimal = decimal_date(birth_date),
-         obs_date = birth_date_decimal + age) |> 
-  filter(obs_date < (as_date("2019-jan-01") |> decimal_date())) |> 
+         obs_date           = birth_date_decimal + age) |> 
+  filter(obs_date < (as_date("2019-jan-01") |> decimal_date())) |>
   #filter(obs_date < (as_date("2019-dec-31") |> decimal_date())) |> 
   # filter(obs_date < (as_date("2020-feb-28") |> decimal_date())) |> 
   group_by(female) |>
@@ -29,7 +29,7 @@ split_data <- hrs_msm |>
     qmatrix    = Q,
     obstype    = obstype,
     deathexact = 3,
-    covariates = ~ age_spline1 + age_spline2 + age_spline3 + int_date_decimal,
+    covariates = ~ age_spline1 + age_spline2 + age_spline3 + obs_date,
     control    = list(fnscale = 5000, maxit = 25000),
     gen.inits  = TRUE,
     method     = "BFGS" 
