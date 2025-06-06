@@ -8,7 +8,7 @@ age_int <- 0.25
 prediction_grid <- crossing(
   sex = c("Male", "Female"),
   age = seq(50, 100, by = age_int),
-  int_date_decimal = c(2000, 2010, 2020)
+  obs_date = c(2000, 2010, 2020)
 )
 spline_basis <- predict(spline_basis_fit, 
                         newx = prediction_grid$age) |>
@@ -23,12 +23,12 @@ model <- split_data |>
 # this is the full fit for prob and rates
 pred <- prediction_grid |>
   # for each combination of these variables
-  group_nest(sex, age, int_date_decimal, .key = "data_fit") |>
+  group_nest(sex, age, obs_date, .key = "data_fit") |>
   # create the fitting list
   mutate(data_fit = map2(
     .x = data_fit,
-    .y = int_date_decimal,
-    ~ mutate(.x, int_date_decimal = .y) |>
+    .y = obs_date,
+    ~ mutate(.x, obs_date = .y) |>
       as.list()
   )) |>
   # join the model
@@ -64,19 +64,19 @@ pred <- prediction_grid |>
 # ------------------------------------------------------------------- #
 # unnest rate
 rate <- pred |>
-  dplyr::select(sex, age, int_date_decimal, rate) |>
+  dplyr::select(sex, age, obs_date, rate) |>
   unnest(rate)
 
 # unnest probability
 prob <- pred |>
-  dplyr::select(sex, age, int_date_decimal, prob) |>
+  dplyr::select(sex, age, obs_date, prob) |>
   unnest(prob)
 
 # this is the final result
 result_df <- rate |>
     full_join(prob, 
               by = join_by(sex, age,
-                           int_date_decimal, from, to)) |>
+                           obs_date, from, to)) |>
   # remove D-D transitions (empty)
   filter(from != "State 3") |>
   # remove recovery possibility (empty)
