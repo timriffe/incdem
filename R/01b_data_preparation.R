@@ -1,14 +1,13 @@
 # ------------------------------------------------------------------- #
-source("R/00_packages.R")
+# source("R/00_packages.R")
 # ------------------------------------------------------------------- #
 # Data
  # hrs <- read_csv("Data/riffe_incdem_20250522.csv") |>
  #    mutate(hhidpn = sprintf("%09.0f", hhidpn))
 
 # try R-produced hrs file:
-# source("R/01_read_recode_hrs.R")
- hrs <- hrs_joined |> 
-   mutate(age = age_imputed)
+source("R/01a_read_recode_hrs.R")
+ hrs <- hrs_joined 
 
 # ------------------------------------------------------------------- #
 # first pass processing

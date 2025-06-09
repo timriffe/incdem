@@ -104,7 +104,7 @@ hrs_long <-
   group_by(hhidpn) |>
   mutate(age_imputed = impute_age(age, wave)) |> 
   ungroup() |>
-   group_by(hhidpn) |>
+  group_by(hhidpn) |>
   mutate(across(c(hibpe, diabe, hearte, stroke),
                 ~ cummax(replace_na(., 0)),
                 .names = "{.col}_status")) |>
@@ -189,7 +189,15 @@ hrs_joined <- hrs_long |>
       TRUE                     ~ NA_integer_ # NA otherwise
     )
   ) |> 
-  rename(birth_date = rabdate)
+  select(-stroke, -hibpe, -diabe, -hearte, -cogfunction, -cog_dementia, -n) |> 
+  rename(birth_date = rabdate,
+         death_date = raddate,
+         hypertension = hibpe_status,
+         diabetes = diabe_status,
+         heart_disease = hearte_status,
+         stroke = stroke_status) |> 
+  mutate(age = age_imputed) |> 
+  select(-age_imputed)
 
 # View result
 # write_csv(hrs_joined, "./Data/rand_hrs_processed.csv")

@@ -190,14 +190,14 @@ fit_msm_sensitivity <- function(.data,
 
 # ------------------------------------------------------------------- #
 # create obs_date code by TR
-hrs_msm <- hrs_msm |>
+hrs_to_fit <- hrs_msm |>
   # a test condition to check pandemic effect on mort trend
   mutate(
     birth_date         = as_date(birth_date, origin = "1960-01-01"),
     birth_date_decimal = decimal_date(birth_date),
     obs_date           = birth_date_decimal + age
   ) |>
-  filter(obs_date < (as_date("2019-jan-01") |> decimal_date())) |>
+  filter(obs_date < (as_date("2019-dec-31") |> decimal_date())) |>
   # factor variables
   mutate(across(c(female, race, hispanic, education,
                   hypertension, diabetes, heart_disease,
@@ -209,7 +209,7 @@ hrs_msm <- hrs_msm |>
 # NOTE: since covariate is continuous, I provide cont_grid
 # that is used in the prediction part to predict data on these particular point
 # in this example it will return predictions for 2000 2010 and 2020
-results1 <- hrs_msm |>
+results1 <- hrs_to_fit |>
   fit_msm_sensitivity(
     strat_vars    = c("female"),
     covariate_var = c("obs_date"),
@@ -248,7 +248,7 @@ results1 |>
 # Example 2
 # stratify by sex and use stroke and education as covariate
 # NOTE: since there is no continuous covariates  cont_grid is set to NULL
-results2 <- hrs_msm |>
+results2 <- hrs_to_fit |>
   # filter(!is.na(Date), !is.na(hypertension)) |>
   fit_msm_sensitivity(
     strat_vars    = c("female"),
@@ -286,14 +286,12 @@ results2 |>
 # ------------------------------------------------------------------- #
 # Example 3
 # Lets separate data by time in 2 periods
-hrs_msm <- hrs_msm |>
+results3 <- hrs_to_fit |>
   # before and after 2010 just as an example
   mutate(Period = ifelse(obs_date < 2010, "<2010", "2011+")) |>
   # factor it
-  mutate(Period = as.factor(Period))
-
+  mutate(Period = as.factor(Period)) |> 
 # Here we use stroke as covariate and sex and Period as stratas
-results3 <- hrs_msm |>
   # filter(!is.na(Date), !is.na(hypertension)) |>
   fit_msm_sensitivity(
     strat_vars    = c("female", "Period"),
@@ -327,7 +325,7 @@ results3 |>
 # ------------------------------------------------------------------- #
 # Example 4
 # same as 3 but now Period is in covariates
-results4 <- hrs_msm |>
+results4 <- hrs_to_fit |>
   # filter(!is.na(Date), !is.na(hypertension)) |>
   fit_msm_sensitivity(
     strat_vars    = c("female"),
