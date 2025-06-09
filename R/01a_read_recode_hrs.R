@@ -1,31 +1,6 @@
 # Load required packages
 source("R/00_packages.R")
 
-impute_age <- function(age, wave){
-  if (all(is.na(age))){
-    return(age)
-  }
-  age <-  zoo::na.approx(age, x = wave, na.rm = FALSE)
-  if (any(is.na(age))){
-    if (is.na(age[1])){
-      # handle leading NAs
-      diffs            <- diff(wave) * 2
-      nNAs             <- rle(is.na(age))$lengths[1]
-      first_non_NA_age <- age[!is.na(age)][1]
-      subtract_this    <- diffs[1:nNAs] |> rev() |> cumsum() |> rev()
-      age[1:nNAs]      <- first_non_NA_age - subtract_this
-    }
-    n <- length(age)
-    if (is.na(age[n])){
-      diffs            <- diff(wave) * 2
-      nNAs             <- rle(is.na(rev(age)))$lengths[1]
-      last_non_NA_age  <- age[!is.na(age)] |> rev() %>% '['(1)
-      add_this         <- diffs[(n-nNAs):(n-1)] |> cumsum()
-      age[(n-nNAs+1):n]  <- last_non_NA_age + add_this
-    }
-  }
-  age
-}
 # Select necessary variables from main dataset
 max_wave <- 16
 hrs_file <- if_else(max_wave == 16, "randhrs1992_2022v1.dta","randhrs1992_2020v2.dta")
