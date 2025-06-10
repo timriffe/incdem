@@ -21,8 +21,12 @@ transitions_fit2 <-
   mutate(period = as.factor(period)) |> 
   fit_msm_sensitivity(
     strat_vars    = c("female", "period"),
+    covariate_var = NULL,
     age_int       = 0.25,
-    cont_grid     = NULL
+    cont_grid     = NULL,
+    spline_df     = 3,
+    spline_type   = "ns",
+    age_pred_grid = c(50, 100)
   )
 
 period_covariate2 <-
@@ -58,8 +62,12 @@ transitions_fit3 <-
   mutate(period = as.factor(period)) |> 
   fit_msm_sensitivity(
     strat_vars    = c("female", "period"),
+    covariate_var = NULL,
     age_int       = 0.25,
-    cont_grid     = NULL
+    cont_grid     = NULL,
+    spline_df     = 3,
+    spline_type   = "ns",
+    age_pred_grid = c(50, 100)
   )
 
 

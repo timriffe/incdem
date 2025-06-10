@@ -32,7 +32,10 @@ hrs_to_fit <- hrs_msm |>
 fitted_hyp_strata <-
   hrs_to_fit |> 
   fit_msm_sensitivity(strat_vars    = c("female", "hypertension"),
-                      age_int       = 0.25) |> 
+                      age_int       = 0.25,
+                      spline_df     = 3,
+                      spline_type   = "ns",
+                      age_pred_grid = c(50, 100)) |> 
   mutate(health_var = "hypertension",
          type = "strata")
 
@@ -40,7 +43,10 @@ fitted_hyp_cov <-
   hrs_to_fit |> 
   fit_msm_sensitivity(strat_vars    = c("female"),
                       covariate_var = c("hypertension"),
-                      age_int       = 0.25) |> 
+                      age_int       = 0.25,
+                      spline_df     = 3,
+                      spline_type   = "ns",
+                      age_pred_grid = c(50, 100)) |> 
   mutate(health_var = "hypertension",
          type = "covariate")
 
@@ -61,7 +67,10 @@ fitted_hyp_strata |>
   fitted_diabetes_strata <-
     hrs_to_fit |> 
     fit_msm_sensitivity(strat_vars    = c("female", "diabetes"),
-                        age_int       = 0.25) |> 
+                        age_int       = 0.25,
+                        spline_df     = 3,
+                        spline_type   = "ns",
+                        age_pred_grid = c(50, 100)) |> 
     mutate(health_var = "diabetes",
            type = "strata")
   
@@ -69,7 +78,10 @@ fitted_hyp_strata |>
     hrs_to_fit |> 
     fit_msm_sensitivity(strat_vars    = c("female"),
                         covariate_var = c("diabetes"),
-                        age_int       = 0.25) |> 
+                        age_int       = 0.25,
+                        spline_df     = 3,
+                        spline_type   = "ns",
+                        age_pred_grid = c(50, 100)) |> 
     mutate(health_var = "diabetes",
            type = "covariate")
   
@@ -90,7 +102,10 @@ fitted_hyp_strata |>
   fitted_heart_disease_strata <-
     hrs_to_fit |> 
     fit_msm_sensitivity(strat_vars    = c("female", "heart_disease"),
-                        age_int       = 0.25) |> 
+                        age_int       = 0.25,
+                        spline_df     = 3,
+                        spline_type   = "ns",
+                        age_pred_grid = c(50, 100)) |> 
     mutate(health_var = "heart_disease",
            type = "strata")
   
@@ -98,7 +113,10 @@ fitted_hyp_strata |>
     hrs_to_fit |> 
     fit_msm_sensitivity(strat_vars    = c("female"),
                         covariate_var = c("heart_disease"),
-                        age_int       = 0.25) |> 
+                        age_int       = 0.25,
+                        spline_df     = 3,
+                        spline_type   = "ns",
+                        age_pred_grid = c(50, 100)) |> 
     mutate(health_var = "heart_disease",
            type = "covariate")
   
@@ -118,7 +136,10 @@ fitted_hyp_strata |>
   fitted_stroke_strata <-
     hrs_to_fit |> 
     fit_msm_sensitivity(strat_vars    = c("female", "stroke"),
-                        age_int       = 0.25) |> 
+                        age_int       = 0.25,
+                        spline_df     = 3,
+                        spline_type   = "ns",
+                        age_pred_grid = c(50, 100)) |> 
     mutate(health_var = "stroke",
            type = "strata")
   
@@ -126,7 +147,10 @@ fitted_hyp_strata |>
     hrs_to_fit |> 
     fit_msm_sensitivity(strat_vars    = c("female"),
                         covariate_var = c("stroke"),
-                        age_int       = 0.25) |> 
+                        age_int       = 0.25,
+                        spline_df     = 3,
+                        spline_type   = "ns",
+                        age_pred_grid = c(50, 100)) |> 
     mutate(health_var = "stroke",
            type = "covariate")
   
