@@ -1,0 +1,175 @@
+source("R/00_packages.R")
+source("R/01a_read_recode_hrs.R")
+source("R/01b_data_preparation.R")
+Q <- rbind(
+  c(0, 0.1, 0.1),  # healthy can go to dementia or death
+  c(0, 0,   0.1),  # dementia can go to death
+  c(0, 0,   0)     # death is absorbing
+)
+diag(Q) <- -rowSums(Q)
+hrs_to_fit <- hrs_msm |>
+  # a test condition to check pandemic effect on mort trend
+  mutate(
+    birth_date         = as_date(birth_date, origin = "1960-01-01"),
+    birth_date_decimal = decimal_date(birth_date),
+    obs_date           = birth_date_decimal + age
+  ) |>
+  filter(obs_date < (as_date("2019-dec-31") |> decimal_date())) |>
+  # factor variables
+  mutate(across(c(female, race, hispanic, education,
+                  hypertension, diabetes, heart_disease,
+                  stroke, ever_dementia), ~ as.factor(.))) 
+
+# at this time, health variables are all time-varying ever-had variables
+
+# hrs_to_fit |> 
+#   group_by(hhidpn) |> 
+#   summarize(n_st = unique(stroke) |> length()) |> 
+#   pull(n_st) |> unique()
+
+
+# (1) "hypertension"
+fitted_hyp_strata <-
+  hrs_to_fit |> 
+  fit_msm_sensitivity(strat_vars    = c("female", "hypertension"),
+                      age_int       = 0.25) |> 
+  mutate(health_var = "hypertension",
+         type = "strata")
+
+fitted_hyp_cov <-
+  hrs_to_fit |> 
+  fit_msm_sensitivity(strat_vars    = c("female"),
+                      covariate_var = c("hypertension"),
+                      age_int       = 0.25) |> 
+  mutate(health_var = "hypertension",
+         type = "covariate")
+
+fitted_hyp_strata |> 
+  bind_rows(fitted_hyp_cov) |> 
+  mutate(to = to |> as.character() |> parse_number(),
+         from = from |> as.character()|> parse_number(),
+         transition = paste0("m",from,to)) |> 
+  filter(to > from) |> 
+  ggplot(aes(x = age, y = rate, color = type, linetype = hypertension)) +
+    geom_line() +
+    facet_wrap(female~transition) +
+  scale_y_log10() +
+  theme_minimal()
+
+# (2) "diabetes"
+  
+  fitted_diabetes_strata <-
+    hrs_to_fit |> 
+    fit_msm_sensitivity(strat_vars    = c("female", "diabetes"),
+                        age_int       = 0.25) |> 
+    mutate(health_var = "diabetes",
+           type = "strata")
+  
+  fitted_diabetes_cov <-
+    hrs_to_fit |> 
+    fit_msm_sensitivity(strat_vars    = c("female"),
+                        covariate_var = c("diabetes"),
+                        age_int       = 0.25) |> 
+    mutate(health_var = "diabetes",
+           type = "covariate")
+  
+  fitted_diabetes_strata |> 
+    bind_rows(fitted_diabetes_cov) |> 
+    mutate(to = to |> as.character() |> parse_number(),
+           from = from |> as.character()|> parse_number(),
+           transition = paste0("m",from,to)) |> 
+    filter(to > from) |> 
+  ggplot(aes(x = age, y = rate, color = type, linetype = diabetes)) +
+    geom_line() +
+    facet_wrap(female~transition) +
+    scale_y_log10() +
+    theme_minimal()
+  
+# (3) "heart_disease"
+  
+  fitted_heart_disease_strata <-
+    hrs_to_fit |> 
+    fit_msm_sensitivity(strat_vars    = c("female", "heart_disease"),
+                        age_int       = 0.25) |> 
+    mutate(health_var = "heart_disease",
+           type = "strata")
+  
+  fitted_heart_disease_cov <-
+    hrs_to_fit |> 
+    fit_msm_sensitivity(strat_vars    = c("female"),
+                        covariate_var = c("heart_disease"),
+                        age_int       = 0.25) |> 
+    mutate(health_var = "heart_disease",
+           type = "covariate")
+  
+  fitted_heart_disease_strata |> 
+    bind_rows(fitted_heart_disease_cov) |> 
+    mutate(to = to |> as.character() |> parse_number(),
+           from = from |> as.character()|> parse_number(),
+           transition = paste0("m",from,to)) |> 
+    filter(to > from) |> 
+  ggplot(aes(x = age, y = rate, color = type, linetype = heart_disease)) +
+    geom_line() +
+    facet_wrap(female~transition) +
+    scale_y_log10() +
+    theme_minimal()
+  
+# (4) "stroke"
+  fitted_stroke_strata <-
+    hrs_to_fit |> 
+    fit_msm_sensitivity(strat_vars    = c("female", "stroke"),
+                        age_int       = 0.25) |> 
+    mutate(health_var = "stroke",
+           type = "strata")
+  
+  fitted_stroke_cov <-
+    hrs_to_fit |> 
+    fit_msm_sensitivity(strat_vars    = c("female"),
+                        covariate_var = c("stroke"),
+                        age_int       = 0.25) |> 
+    mutate(health_var = "stroke",
+           type = "covariate")
+  
+  fitted_stroke_strata |> 
+    bind_rows(fitted_stroke_cov) |> 
+    mutate(to = to |> as.character() |> parse_number(),
+           from = from |> as.character()|> parse_number(),
+           transition = paste0("m",from,to)) |> 
+    filter(to > from) |> 
+    ggplot(aes(x = age, y = rate, color = type, linetype = stroke)) +
+    geom_line() +
+    facet_wrap(female~transition) +
+    scale_y_log10() +
+    theme_minimal()
+
+# bind all results:
+fitted_hyp <-
+  fitted_hyp_strata |> 
+  bind_rows(fitted_hyp_cov) |> 
+  select(-hypertension)
+fitted_diabetes <-
+  fitted_diabetes_strata |> 
+  bind_rows(fitted_diabetes_cov) |> 
+  select(-diabetes)
+fitted_heart_disease <-
+  fitted_heart_disease_strata |> 
+  bind_rows(fitted_heart_disease_cov) |> 
+  select(-heart_disease)
+fitted_stroke <-
+  fitted_stroke_strata |> 
+  bind_rows(fitted_stroke_cov) |> 
+  select(-stroke)
+  
+health_variable_tests <- 
+bind_rows(fitted_hyp, 
+          fitted_diabetes, 
+          fitted_heart_disease, 
+          fitted_stroke) |> 
+  mutate(to = to |> as.character() |> parse_number(),
+         from = from |> as.character()|> parse_number(),
+         transition = paste0("m",from,to),
+         gender = female |> as.character(),
+         gender = if_else(gender == "0","men","women")) |> 
+  select(-female)
+
+write_csv(health_variable_tests, "Data/health_var_tests.csv.gz")
