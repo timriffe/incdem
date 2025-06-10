@@ -50,18 +50,6 @@ fitted_hyp_cov <-
   mutate(health_var = "hypertension",
          type = "covariate")
 
-fitted_hyp_strata |> 
-  bind_rows(fitted_hyp_cov) |> 
-  mutate(to = to |> as.character() |> parse_number(),
-         from = from |> as.character()|> parse_number(),
-         transition = paste0("m",from,to)) |> 
-  filter(to > from) |> 
-  ggplot(aes(x = age, y = rate, color = type, linetype = hypertension)) +
-    geom_line() +
-    facet_wrap(female~transition) +
-  scale_y_log10() +
-  theme_minimal()
-
 # (2) "diabetes"
   
   fitted_diabetes_strata <-
@@ -84,18 +72,6 @@ fitted_hyp_strata |>
                         age_pred_grid = c(50, 100)) |> 
     mutate(health_var = "diabetes",
            type = "covariate")
-  
-  fitted_diabetes_strata |> 
-    bind_rows(fitted_diabetes_cov) |> 
-    mutate(to = to |> as.character() |> parse_number(),
-           from = from |> as.character()|> parse_number(),
-           transition = paste0("m",from,to)) |> 
-    filter(to > from) |> 
-  ggplot(aes(x = age, y = rate, color = type, linetype = diabetes)) +
-    geom_line() +
-    facet_wrap(female~transition) +
-    scale_y_log10() +
-    theme_minimal()
   
 # (3) "heart_disease"
   
@@ -120,18 +96,6 @@ fitted_hyp_strata |>
     mutate(health_var = "heart_disease",
            type = "covariate")
   
-  fitted_heart_disease_strata |> 
-    bind_rows(fitted_heart_disease_cov) |> 
-    mutate(to = to |> as.character() |> parse_number(),
-           from = from |> as.character()|> parse_number(),
-           transition = paste0("m",from,to)) |> 
-    filter(to > from) |> 
-  ggplot(aes(x = age, y = rate, color = type, linetype = heart_disease)) +
-    geom_line() +
-    facet_wrap(female~transition) +
-    scale_y_log10() +
-    theme_minimal()
-  
 # (4) "stroke"
   fitted_stroke_strata <-
     hrs_to_fit |> 
@@ -154,35 +118,23 @@ fitted_hyp_strata |>
     mutate(health_var = "stroke",
            type = "covariate")
   
-  fitted_stroke_strata |> 
-    bind_rows(fitted_stroke_cov) |> 
-    mutate(to = to |> as.character() |> parse_number(),
-           from = from |> as.character()|> parse_number(),
-           transition = paste0("m",from,to)) |> 
-    filter(to > from) |> 
-    ggplot(aes(x = age, y = rate, color = type, linetype = stroke)) +
-    geom_line() +
-    facet_wrap(female~transition) +
-    scale_y_log10() +
-    theme_minimal()
-
 # bind all results:
 fitted_hyp <-
   fitted_hyp_strata |> 
   bind_rows(fitted_hyp_cov) |> 
-  select(-hypertension)
+  rename(status = hypertension)
 fitted_diabetes <-
   fitted_diabetes_strata |> 
   bind_rows(fitted_diabetes_cov) |> 
-  select(-diabetes)
+  rename(status = diabetes)
 fitted_heart_disease <-
   fitted_heart_disease_strata |> 
   bind_rows(fitted_heart_disease_cov) |> 
-  select(-heart_disease)
+  rename(status = heart_disease)
 fitted_stroke <-
   fitted_stroke_strata |> 
   bind_rows(fitted_stroke_cov) |> 
-  select(-stroke)
+  rename(status = stroke)
   
 health_variable_tests <- 
 bind_rows(fitted_hyp, 
@@ -197,3 +149,17 @@ bind_rows(fitted_hyp,
   select(-female)
 
 write_csv(health_variable_tests, "Data/health_var_tests.csv.gz")
+
+
+health_variable_tests |> 
+  filter(transition == "m12") |> 
+  ggplot(aes(x = age, y = rate, color = type, linetype = status)) +
+  geom_line() +
+  scale_y_log10() +
+  facet_grid(vars(gender),vars(health_var)) +
+  theme_minimal()
+
+
+
+
+
