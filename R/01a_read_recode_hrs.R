@@ -1,31 +1,6 @@
 # Load required packages
 source("R/00_packages.R")
 
-impute_age <- function(age, wave){
-  if (all(is.na(age))){
-    return(age)
-  }
-  age <-  zoo::na.approx(age, x = wave, na.rm = FALSE)
-  if (any(is.na(age))){
-    if (is.na(age[1])){
-      # handle leading NAs
-      diffs            <- diff(wave) * 2
-      nNAs             <- rle(is.na(age))$lengths[1]
-      first_non_NA_age <- age[!is.na(age)][1]
-      subtract_this    <- diffs[1:nNAs] |> rev() |> cumsum() |> rev()
-      age[1:nNAs]      <- first_non_NA_age - subtract_this
-    }
-    n <- length(age)
-    if (is.na(age[n])){
-      diffs            <- diff(wave) * 2
-      nNAs             <- rle(is.na(rev(age)))$lengths[1]
-      last_non_NA_age  <- age[!is.na(age)] |> rev() %>% '['(1)
-      add_this         <- diffs[(n-nNAs):(n-1)] |> cumsum()
-      age[(n-nNAs+1):n]  <- last_non_NA_age + add_this
-    }
-  }
-  age
-}
 # Select necessary variables from main dataset
 max_wave <- 16
 hrs_file <- if_else(max_wave == 16, "randhrs1992_2022v1.dta","randhrs1992_2020v2.dta")
@@ -104,7 +79,7 @@ hrs_long <-
   group_by(hhidpn) |>
   mutate(age_imputed = impute_age(age, wave)) |> 
   ungroup() |>
-   group_by(hhidpn) |>
+  group_by(hhidpn) |>
   mutate(across(c(hibpe, diabe, hearte, stroke),
                 ~ cummax(replace_na(., 0)),
                 .names = "{.col}_status")) |>
@@ -189,7 +164,15 @@ hrs_joined <- hrs_long |>
       TRUE                     ~ NA_integer_ # NA otherwise
     )
   ) |> 
-  rename(birth_date = rabdate)
+  select(-stroke, -hibpe, -diabe, -hearte, -cogfunction, -cog_dementia, -n) |> 
+  rename(birth_date = rabdate,
+         death_date = raddate,
+         hypertension = hibpe_status,
+         diabetes = diabe_status,
+         heart_disease = hearte_status,
+         stroke = stroke_status) |> 
+  mutate(age = age_imputed) |> 
+  select(-age_imputed)
 
 # View result
 # write_csv(hrs_joined, "./Data/rand_hrs_processed.csv")
