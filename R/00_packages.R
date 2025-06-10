@@ -52,6 +52,9 @@ impute_age <- function(age, wave){
 #' @param covariate_var A character vector of covariate variable names to include in the model.
 #' @param age_int A numeric value specifying the interval for prediction ages (default is 0.25 years).
 #' @param cont_grid This parameter is only used if one of the stratification or vovariate vars is continuous. Say we have continuous time, in this case this variable should take the values like 2000, 2010, for data fitting
+#' @param age_pred_grid A numberic vector. This parameter controls the lower and upper bnound of the age prediction grid 
+#' @param spline_df A number. This parameter indicates the degrees of freedom for the age spline fitting. E.G. if 3 then 3 splines are created 
+#' @param spline_type A character. Either "ns" or "bs" - indicates the type of spline to be fitted to the age
 #' @return A data frame with estimated transition rates and probabilities 
 #' 
 
@@ -70,10 +73,17 @@ impute_age <- function(age, wave){
 # NOTE: Dont pay attention to warning. IT DOES NOT AFFECT RESULTS
 # I suggest using newly created obs_date as a time variable
 fit_msm_sensitivity <- function(.data,
+                                # main variables
                                 strat_vars    = NULL,
                                 covariate_var = NULL,
+                                # only used for continuous variables
+                                cont_grid     = NULL,
+                                # age grid specification part
+                                age_pred_grid = c(50, 100),
                                 age_int       = 0.25,
-                                cont_grid     = NULL) {
+                                # spline specification part
+                                spline_df     = 3,
+                                spline_type   = "ns") {
   # --------------------------------------------------------------#
   # PT1
   # We start by constructing the grid
@@ -99,18 +109,27 @@ fit_msm_sensitivity <- function(.data,
   }
   
   # add base predictors. in our model it is age
+  # from age_pred_grid from fisr to last by age_int
   base_grid <- list(
-    age    = seq(50, 100, by = age_int)
+    age    = seq(age_pred_grid[1], 
+                 age_pred_grid[2], 
+                 by = age_int)
   )
   
   # construct prediction grid dynamically
   prediction_grid <- exec(crossing, !!!c(base_grid, vars))
   
+  # construct spline basis for age
+  # Here we can also add another types of splines
+  # currently only ns or bs
+  # spline_df specified number of splines
+  spline_basis_fit <- get(spline_type)(.data$age, df = spline_df)
+  
   # predict the spline basis for the age specification
   spline_basis <- predict(spline_basis_fit,
                           newx = prediction_grid$age) |>
-    as.data.frame() |>
-    setNames(paste0("age_spline", 1:3))
+    as_tibble() |>
+    set_names(paste0("age_spline", 1:spline_df))
   
   # bind data together
   prediction_grid <- bind_cols(prediction_grid, spline_basis) |>
@@ -132,7 +151,7 @@ fit_msm_sensitivity <- function(.data,
   # create fit model with arbitrary covariates
   # always assume that age aplines are used and age is provided
   # NOTE: Takes time
-  base_covs   <- c("age_spline1", "age_spline2", "age_spline3")
+  base_covs   <- names(spline_basis)
   all_covs    <- c(base_covs, covariate_var)
   cov_formula <- reformulate(all_covs)
   

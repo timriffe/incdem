@@ -33,12 +33,21 @@ hrs_to_fit <- hrs_msm |>
 # NOTE: since covariate is continuous, I provide cont_grid
 # that is used in the prediction part to predict data on these particular point
 # in this example it will return predictions for 2000 2010 and 2020
+# age grid is from 50 to 100
+# natural splines with 3 df
 results1 <- hrs_to_fit |>
   fit_msm_sensitivity(
+    # main part
     strat_vars    = c("female"),
     covariate_var = c("obs_date"),
+    # age grid part
+    age_pred_grid = c(50, 100),
     age_int       = 0.25,
-    cont_grid     = c(2000, 2010, 2020)
+    # continuous time grid
+    cont_grid     = c(2000, 2010, 2020),
+    # splines part
+    spline_df     = 3,
+    spline_type   = "ns"
   )
 
 # here is the corresponding plot for example 1
@@ -77,8 +86,11 @@ results2 <- hrs_to_fit |>
   fit_msm_sensitivity(
     strat_vars    = c("female"),
     covariate_var = c("education", "stroke"),
+    age_pred_grid = c(50, 100),
     age_int       = 0.25,
-    cont_grid     = NULL # !!!
+    cont_grid     = NULL, # !!!
+    spline_df     = 3,
+    spline_type   = "ns"
   )
 
 # here is the figure for example 2
@@ -120,8 +132,11 @@ results3 <- hrs_to_fit |>
   fit_msm_sensitivity(
     strat_vars    = c("female", "Period"),
     covariate_var = c("stroke"),
+    age_pred_grid = c(50, 100),
     age_int       = 0.25,
-    cont_grid     = NULL
+    cont_grid     = NULL,
+    spline_df     = 3,
+    spline_type   = "ns"
   )
 
 # here is the plot for example 3
@@ -154,8 +169,11 @@ results4 <- hrs_to_fit |>
   fit_msm_sensitivity(
     strat_vars    = c("female"),
     covariate_var = c("stroke", "Period"),
+    age_pred_grid = c(50, 100),
     age_int       = 0.25,
-    cont_grid     = NULL
+    cont_grid     = NULL,
+    spline_df     = 3,
+    spline_type   = "ns"
   )
 
 # here is the plot for example 4
