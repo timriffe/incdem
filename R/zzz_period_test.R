@@ -29,12 +29,14 @@ transitions_fit2 <-
     age_pred_grid = c(50, 100)
   )
 
-period_covariate2 <-
-  transitions_fit2 |>
+
+transitions_fit2 |>
   mutate(to = to |> as.character() |> parse_number(),
-         from = from |> as.character()|> parse_number()) |> 
+         from = from |> as.character()|> parse_number(),
+         transition = paste0("m",from,to),
+         gender = female |> as.character(),
+         gender = if_else(gender == "0","men","women")) |> 
   filter(to > from) |> 
-  mutate(transition = paste0("haz", from, to)) |>
   ggplot(aes(x        = age, 
              y        = rate, 
              color    = transition, 
@@ -48,7 +50,7 @@ period_covariate2 <-
   ) +
   theme_minimal() +
   scale_y_log10() +
-  facet_wrap( ~ female) + 
+  facet_wrap( ~ gender) + 
   theme(legend.position = "bottom")
 
 
