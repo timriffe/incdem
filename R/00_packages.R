@@ -11,8 +11,9 @@ library(msm)
 library(haven)
 library(zoo)
 library(slider)
-
-# ------------------------------------------------------------------- #
+library(parallel)
+library(doParallel)
+# ------parallel# ------------------------------------------------------------------- #
 # impute age using some simple logic
 impute_age <- function(age, wave){
   if (all(is.na(age))){
