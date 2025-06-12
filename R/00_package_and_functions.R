@@ -245,7 +245,7 @@ fit_msm_models <- function(.data,
   
   # --------------------------------------------------------------#
   # PART 4
-  # boothstrapping for confidence intervals
+  # bootstrapping for confidence intervals
   # ci <- prediction_grid |>
   #   mutate(age_interval = age_int) |>
   #   left_join(result, by = strat_vars) |>
