@@ -1,24 +1,9 @@
-source("R/00_packages.R")
-source("R/01a_read_recode_hrs.R")
-source("R/01b_data_preparation.R")
-Q <- rbind(
-  c(0, 0.1, 0.1),  # healthy can go to dementia or death
-  c(0, 0,   0.1),  # dementia can go to death
-  c(0, 0,   0)     # death is absorbing
-)
-diag(Q) <- -rowSums(Q)
-hrs_to_fit <- hrs_msm |>
-  # a test condition to check pandemic effect on mort trend
-  mutate(
-    birth_date         = as_date(birth_date, origin = "1960-01-01"),
-    birth_date_decimal = decimal_date(birth_date),
-    obs_date           = birth_date_decimal + age
-  ) |>
-  filter(obs_date < (as_date("2019-dec-31") |> decimal_date())) |>
-  # factor variables
-  mutate(across(c(female, race, hispanic, education,
-                  hypertension, diabetes, heart_disease,
-                  stroke, ever_dementia), ~ as.factor(.))) 
+source("R/01read_and_prepare_hrs.R")
+# source("R/01a_read_recode_hrs.R")
+# source("R/01b_data_preparation.R")
+
+
+
 
 # at this time, health variables are all time-varying ever-had variables
 
@@ -31,16 +16,40 @@ hrs_to_fit <- hrs_msm |>
 # (1) "hypertension"
 fitted_hyp_strata <-
   hrs_to_fit |> 
-  fit_msm_sensitivity(strat_vars    = c("female", "hypertension"),
-                      age_int       = 0.25) |> 
+  fit_msm_models(strat_vars    = c("female", "hypertension"),
+                      age_int       = 0.25,
+                      spline_df     = 3,
+                      spline_type   = "ns",
+                      age_from_to = c(50, 100),
+                 calc_spline   = TRUE,
+                 n_cores       = 1,
+                 B             = 2,
+                 # create Q matrix
+                 Q = rbind(
+                   c(0, 0.1, 0.1),  # healthy can go to dementia or death
+                   c(0, 0,   0.1),  # dementia can go to death
+                   c(0, 0,   0)     # death is absorbing
+                 )) |> 
   mutate(health_var = "hypertension",
          type = "strata")
 
 fitted_hyp_cov <-
   hrs_to_fit |> 
-  fit_msm_sensitivity(strat_vars    = c("female"),
+  fit_msm_models(strat_vars    = c("female"),
                       covariate_var = c("hypertension"),
-                      age_int       = 0.25) |> 
+                      age_int       = 0.25,
+                      spline_df     = 3,
+                      spline_type   = "ns",
+                      age_from_to = c(50, 100),
+                 calc_spline   = TRUE,
+                 n_cores       = 1,
+                 B             = 2,
+                 # create Q matrix
+                 Q = rbind(
+                   c(0, 0.1, 0.1),  # healthy can go to dementia or death
+                   c(0, 0,   0.1),  # dementia can go to death
+                   c(0, 0,   0)     # death is absorbing
+                 )) |> 
   mutate(health_var = "hypertension",
          type = "covariate")
 
@@ -48,16 +57,40 @@ fitted_hyp_cov <-
   
   fitted_diabetes_strata <-
     hrs_to_fit |> 
-    fit_msm_sensitivity(strat_vars    = c("female", "diabetes"),
-                        age_int       = 0.25) |> 
+    fit_msm_models(strat_vars    = c("female", "diabetes"),
+                        age_int       = 0.25,
+                        spline_df     = 3,
+                        spline_type   = "ns",
+                        age_from_to = c(50, 100),
+                   calc_spline   = TRUE,
+                   n_cores       = 1,
+                   B             = 2,
+                   # create Q matrix
+                   Q = rbind(
+                     c(0, 0.1, 0.1),  # healthy can go to dementia or death
+                     c(0, 0,   0.1),  # dementia can go to death
+                     c(0, 0,   0)     # death is absorbing
+                   )) |> 
     mutate(health_var = "diabetes",
            type = "strata")
   
   fitted_diabetes_cov <-
     hrs_to_fit |> 
-    fit_msm_sensitivity(strat_vars    = c("female"),
+    fit_msm_models(strat_vars    = c("female"),
                         covariate_var = c("diabetes"),
-                        age_int       = 0.25) |> 
+                        age_int       = 0.25,
+                        spline_df     = 3,
+                        spline_type   = "ns",
+                        age_from_to = c(50, 100),
+                   calc_spline   = TRUE,
+                   n_cores       = 1,
+                   B             = 2,
+                   # create Q matrix
+                   Q = rbind(
+                     c(0, 0.1, 0.1),  # healthy can go to dementia or death
+                     c(0, 0,   0.1),  # dementia can go to death
+                     c(0, 0,   0)     # death is absorbing
+                   )) |> 
     mutate(health_var = "diabetes",
            type = "covariate")
   
@@ -65,32 +98,80 @@ fitted_hyp_cov <-
   
   fitted_heart_disease_strata <-
     hrs_to_fit |> 
-    fit_msm_sensitivity(strat_vars    = c("female", "heart_disease"),
-                        age_int       = 0.25) |> 
+    fit_msm_models(strat_vars    = c("female", "heart_disease"),
+                        age_int       = 0.25,
+                        spline_df     = 3,
+                        spline_type   = "ns",
+                        age_from_to = c(50, 100),
+                   calc_spline   = TRUE,
+                   n_cores       = 1,
+                   B             = 2,
+                   # create Q matrix
+                   Q = rbind(
+                     c(0, 0.1, 0.1),  # healthy can go to dementia or death
+                     c(0, 0,   0.1),  # dementia can go to death
+                     c(0, 0,   0)     # death is absorbing
+                   )) |> 
     mutate(health_var = "heart_disease",
            type = "strata")
   
   fitted_heart_disease_cov <-
     hrs_to_fit |> 
-    fit_msm_sensitivity(strat_vars    = c("female"),
+    fit_msm_models(strat_vars    = c("female"),
                         covariate_var = c("heart_disease"),
-                        age_int       = 0.25) |> 
+                        age_int       = 0.25,
+                        spline_df     = 3,
+                        spline_type   = "ns",
+                        age_from_to = c(50, 100),
+                   calc_spline   = TRUE,
+                   n_cores       = 1,
+                   B             = 2,
+                   # create Q matrix
+                   Q = rbind(
+                     c(0, 0.1, 0.1),  # healthy can go to dementia or death
+                     c(0, 0,   0.1),  # dementia can go to death
+                     c(0, 0,   0)     # death is absorbing
+                   )) |> 
     mutate(health_var = "heart_disease",
            type = "covariate")
   
 # (4) "stroke"
   fitted_stroke_strata <-
     hrs_to_fit |> 
-    fit_msm_sensitivity(strat_vars    = c("female", "stroke"),
-                        age_int       = 0.25) |> 
+    fit_msm_models(strat_vars    = c("female", "stroke"),
+                        age_int       = 0.25,
+                        spline_df     = 3,
+                        spline_type   = "ns",
+                        age_from_to = c(50, 100),
+                   calc_spline   = TRUE,
+                   n_cores       = 1,
+                   B             = 2,
+                   # create Q matrix
+                   Q = rbind(
+                     c(0, 0.1, 0.1),  # healthy can go to dementia or death
+                     c(0, 0,   0.1),  # dementia can go to death
+                     c(0, 0,   0)     # death is absorbing
+                   )) |> 
     mutate(health_var = "stroke",
            type = "strata")
   
   fitted_stroke_cov <-
     hrs_to_fit |> 
-    fit_msm_sensitivity(strat_vars    = c("female"),
+    fit_msm_models(strat_vars    = c("female"),
                         covariate_var = c("stroke"),
-                        age_int       = 0.25) |> 
+                        age_int       = 0.25,
+                        spline_df     = 3,
+                        spline_type   = "ns",
+                        age_from_to = c(50, 100),
+                   calc_spline   = TRUE,
+                   n_cores       = 1,
+                   B             = 2,
+                   # create Q matrix
+                   Q = rbind(
+                     c(0, 0.1, 0.1),  # healthy can go to dementia or death
+                     c(0, 0,   0.1),  # dementia can go to death
+                     c(0, 0,   0)     # death is absorbing
+                   )) |> 
     mutate(health_var = "stroke",
            type = "covariate")
   

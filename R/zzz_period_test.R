@@ -19,10 +19,23 @@ transitions_fit2 <-
   mutate(period = ifelse(obs_date < 2010, "<2010", "2011+")) |>
   # factor it
   mutate(period = as.factor(period)) |> 
-  fit_msm_sensitivity(
+  fit_msm_models(
     strat_vars    = c("female", "period"),
+    covariate_var = NULL,
     age_int       = 0.25,
-    cont_grid     = NULL
+    cont_grid     = NULL,
+    spline_df     = 3,
+    spline_type   = "ns",
+    age_from_to = c(50, 100),
+    calc_spline   = TRUE,
+    n_cores       = 1,
+    B             = 2,
+    # create Q matrix
+    Q = rbind(
+      c(0, 0.1, 0.1),  # healthy can go to dementia or death
+      c(0, 0,   0.1),  # dementia can go to death
+      c(0, 0,   0)     # death is absorbing
+    )
   )
 
 
@@ -58,10 +71,23 @@ transitions_fit3 <-
                             between(obs_date,2012,2020) ~ "period 3")) |>
   # factor it
   mutate(period = as.factor(period)) |> 
-  fit_msm_sensitivity(
+  fit_msm_models(
     strat_vars    = c("female", "period"),
+    covariate_var = NULL,
     age_int       = 0.25,
-    cont_grid     = NULL
+    cont_grid     = NULL,
+    spline_df     = 3,
+    spline_type   = "ns",
+    age_from_to = c(50, 100),
+    calc_spline   = TRUE,
+    n_cores       = 1,
+    B             = 2,
+    # create Q matrix
+    Q = rbind(
+      c(0, 0.1, 0.1),  # healthy can go to dementia or death
+      c(0, 0,   0.1),  # dementia can go to death
+      c(0, 0,   0)     # death is absorbing
+    )
   )
 
 
