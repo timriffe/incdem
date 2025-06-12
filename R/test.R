@@ -251,42 +251,42 @@ predict_hazard_and_prob <- function(.x, .y, age_interval = 0.25, models) {
 
 # this one does normal for rates, then uses those 3 matrices to get probs.
 # second step not working...
-predict_hazard_and_prob <- function(.x, .y, age_interval = 0.25, models) {
-  model <- models[[.y$sex]]
-  
-  covariates_row <- .x |>
-    select(starts_with("age_spline")) |>
-    slice(1) |>
-    as.list()
-  names(covariates_row) <- c(paste0("age_spline", 1:3))
-  covariates_row$int_date_decimal <- .y$int_date_decimal
-  
-  # Get estimated Q matrix and its CIs
-  qmat_full <- qmatrix.msm(model, covariates = covariates_row, ci = "normal")
-  qmat_est  <- qmat_full$estimates
-  qmat_low  <- qmat_full$L
-  qmat_high <- qmat_full$U
-  
-  # Predict transition probabilities at fixed Q matrices
-  p_est <- pmatrix.msm(model, t = age_interval, qmatrix = qmat_est)
-  p_low <- pmatrix.msm(model, t = age_interval, qmatrix = qmat_low)
-  p_high <- pmatrix.msm(model, t = age_interval, qmatrix = qmat_high)
-  
-  # Format transition rates
-  q_df <- as.data.frame(as.table(qmat_est)) |>
-    rename(from = Var1, to = Var2, rate = Freq) |>
-    mutate(lower_rate = as.vector(qmat_low),
-           upper_rate = as.vector(qmat_high))
-  
-  # Format probabilities
-  p_df <- as.data.frame(as.table(p_est)) |>
-    rename(from = Var1, to = Var2, prob = Freq) |>
-    mutate(lower_prob = as.vector(p_low),
-           upper_prob = as.vector(p_high))
-  
-  # Combine
-  left_join(q_df, p_df, by = c("from", "to"))
-}
+# predict_hazard_and_prob <- function(.x, .y, age_interval = 0.25, models) {
+#   model <- models[[.y$sex]]
+#   
+#   covariates_row <- .x |>
+#     select(starts_with("age_spline")) |>
+#     slice(1) |>
+#     as.list()
+#   names(covariates_row) <- c(paste0("age_spline", 1:3))
+#   covariates_row$int_date_decimal <- .y$int_date_decimal
+#   
+#   # Get estimated Q matrix and its CIs
+#   qmat_full <- qmatrix.msm(model, covariates = covariates_row, ci = "normal")
+#   qmat_est  <- qmat_full$estimates
+#   qmat_low  <- qmat_full$L
+#   qmat_high <- qmat_full$U
+#   
+#   # Predict transition probabilities at fixed Q matrices
+#   p_est <- pmatrix.msm(model, t = age_interval, qmatrix = qmat_est)
+#   p_low <- pmatrix.msm(model, t = age_interval, qmatrix = qmat_low)
+#   p_high <- pmatrix.msm(model, t = age_interval, qmatrix = qmat_high)
+#   
+#   # Format transition rates
+#   q_df <- as.data.frame(as.table(qmat_est)) |>
+#     rename(from = Var1, to = Var2, rate = Freq) |>
+#     mutate(lower_rate = as.vector(qmat_low),
+#            upper_rate = as.vector(qmat_high))
+#   
+#   # Format probabilities
+#   p_df <- as.data.frame(as.table(p_est)) |>
+#     rename(from = Var1, to = Var2, prob = Freq) |>
+#     mutate(lower_prob = as.vector(p_low),
+#            upper_prob = as.vector(p_high))
+#   
+#   # Combine
+#   left_join(q_df, p_df, by = c("from", "to"))
+# }
 
 
 library(tictoc)
@@ -309,9 +309,20 @@ result_df |>
   filter(to > from) |> 
   ggplot(aes(x=age,y=rate, color = transition, fill = transition)) +
   geom_line() +
-  #geom_ribbon(mapping = aes(ymin = upper_rate, ymax = lower_rate), alpha = .3) +
+  geom_ribbon(mapping = aes(ymin = upper_rate, ymax = lower_rate), alpha = .3) +
   facet_wrap(int_date_decimal~sex) +
   scale_y_log10() +
   theme_minimal()
-result_df |> filter(sex == "Male", from == "State 1", to == "State 2")
-head(result_df)
+
+# probabilities:
+result_df |> 
+  mutate(from = from |> as.character() |> parse_number(),
+         to = to |> as.character() |> parse_number(),
+         transition = paste0("p",from,to)) |> 
+  filter(to > from) |> 
+  ggplot(aes(x=age,y=prob, color = transition, fill = transition)) +
+  geom_line() +
+  geom_ribbon(mapping = aes(ymin = upper_prob, ymax = lower_prob), alpha = .3) +
+  facet_wrap(int_date_decimal~sex) +
+  scale_y_log10() +
+  theme_minimal()
