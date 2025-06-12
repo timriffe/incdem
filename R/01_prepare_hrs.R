@@ -3,8 +3,11 @@ source("R/00_package_and_functions.R")
 
 # Select necessary variables from main dataset
 max_wave <- 16
-hrs_file <- if_else(max_wave == 16, "randhrs1992_2022v1.dta","randhrs1992_2020v2.dta")
-vars <- c("hhidpn", "hhid", "pn", "hacohort", "rabdate", "raddate",
+hrs_file <- if_else(max_wave == 16, 
+                    "randhrs1992_2022v1.dta",
+                    "randhrs1992_2020v2.dta")
+vars <- c("hhidpn", "hhid", "pn", 
+          "hacohort", "rabdate", "raddate",
           paste0("r", 5:max_wave, "iwstat"),
           paste0("r", 5:max_wave, "iwmid"),
           paste0("r", 5:max_wave, "hibpe"),
@@ -15,36 +18,37 @@ vars <- c("hhidpn", "hhid", "pn", "hacohort", "rabdate", "raddate",
 
 # Load main RAND HRS dataset
 hrs_in <- read_dta(file.path("Data",hrs_file), 
-                   encoding = "UTF-8", 
+                   encoding   = "UTF-8", 
                    col_select = all_of(vars)) |> 
   zap_labels() |> 
   mutate(
-    hhid = as.character(hhid),
-    pn = as.character(pn),
+    hhid   = as.character(hhid),
+    pn     = as.character(pn),
     hhidpn = paste0(hhid, pn)
   )
 
 # Load cognition dataset
 cog_colnames <- names(read_dta("Data/cogfinalimp_9520wide.dta", n_max = 0))
-cog_cols_needed <- c("hhid", "pn", grep("^cogfunction\\d{4}$", cog_colnames, value = TRUE))
+cog_cols_needed <- c("hhid", "pn", grep("^cogfunction\\d{4}$", 
+                                        cog_colnames, 
+                                        value = TRUE))
 
 cog <- read_dta("./Data/cogfinalimp_9520wide.dta", 
-                encoding = "UTF-8", 
+                encoding   = "UTF-8", 
                 col_select = all_of(cog_cols_needed)) |>
   zap_labels() |>
   mutate(
-    hhid = as.character(hhid),
-    pn = as.character(pn),
+    hhid   = as.character(hhid),
+    pn     = as.character(pn),
     hhidpn = paste0(hhid, pn)
   ) |>
   select(hhidpn, starts_with("cogfunction"))
 
 # Pre-process HRS dataset
-hrs_long <- 
-  hrs_in |>
+hrs_long <- hrs_in |>
   mutate(
     female = as.integer(ragender == 2),
-    race = case_when(
+    race   = case_when(
       raracem == 1 ~ "white",
       raracem == 2 ~ "black",
       raracem == 3 ~ "other"
@@ -52,15 +56,15 @@ hrs_long <-
     hispanic = if_else(rahispan == 1, "hispanic", "non-hispanic"),
     education = case_when(
       raeduc %in% c(1, 2) ~ "ls hs/ged",
-      raeduc == 3 ~ "hs",
+      raeduc == 3         ~ "hs",
       raeduc %in% c(4, 5) ~ ">hs"
     ),
     birth_year = rabyear,
-    cohort = hacohort
+    cohort     = hacohort
   ) |>
   pivot_longer(
     cols = matches("^r\\d{1,2}(iwstat|iwmid|hibpe|diabe|hearte|stroke)$"),
-    names_to = c("wave", ".value"),
+    names_to      = c("wave", ".value"),
     names_pattern = "r(\\d{1,2})([a-z]+)"
   ) |>
   mutate(wave = as.integer(wave)) |>
@@ -72,7 +76,7 @@ hrs_long <-
     int_date      = if_else(iwstat == 5, raddate, iwmid)
   ) |>
   group_by(hhidpn) |> 
-  mutate(n=n()) |> 
+  mutate(n = n()) |> 
   ungroup() |> 
   filter(n > 1) |> 
   arrange(hhidpn, wave) |>
@@ -91,13 +95,12 @@ hrs_long <-
 # 
 
 # Cognition: reshape and process
-cog_long <- 
-  cog |>
+cog_long <- cog |>
   pivot_longer(
-    cols = starts_with("cogfunction"),
-    names_to = "year",
+    cols          = starts_with("cogfunction"),
+    names_to      = "year",
     names_pattern = "cogfunction(\\d{4})",
-    values_to = "cogfunction"
+    values_to     = "cogfunction"
   ) |>
   mutate(year = as.integer(year)) |>
   # ignore cog status before 2000; inconsistent measurement
@@ -114,7 +117,7 @@ cog_long <-
   arrange(hhidpn, year) |>
   group_by(hhidpn) |> 
   # downup rather than updown: has to do with row ordering not time.
-  tidyr::fill(cog_dementia,.direction = "downup") |> 
+  tidyr::fill(cog_dementia, .direction = "downup") |> 
   mutate(state = cummax(cog_dementia)) |> 
   
   # Forward fill
@@ -153,13 +156,14 @@ hrs_joined <- hrs_long |>
       TRUE                     ~ NA_integer_ # NA otherwise
     )
   ) |> 
-  select(-stroke, -hibpe, -diabe, -hearte, -cogfunction, -cog_dementia, -n) |> 
-  rename(birth_date = rabdate,
-         death_date = raddate,
-         hypertension = hibpe_status,
-         diabetes = diabe_status,
+  select(-c(stroke, hibpe, diabe, hearte, 
+            cogfunction, cog_dementia, n)) |> 
+  rename(birth_date    = rabdate,
+         death_date    = raddate,
+         hypertension  = hibpe_status,
+         diabetes      = diabe_status,
          heart_disease = hearte_status,
-         stroke = stroke_status) |> 
+         stroke         = stroke_status) |> 
   mutate(age = age_imputed) |> 
   select(-age_imputed)
 
@@ -229,13 +233,13 @@ hrs_msm <- hrs_joined |>
 # all filtering before here; needed to create spline 
 # basis with consistent age range in fit and in predictions.
 # spline_basis_fit is also used later for this reason
-spline_basis_fit   <- ns(hrs_msm$age, df = 3)
-age_splines        <- as.data.frame(spline_basis_fit)
-names(age_splines) <- paste0("age_spline", 1:3)
+# spline_basis_fit   <- ns(hrs_msm$age, df = 3)
+# age_splines        <- as.data.frame(spline_basis_fit)
+# names(age_splines) <- paste0("age_spline", 1:3)
 # ------------------------------------------------------------------- #
 # This second part is supposed to eliminate impossible transitions.
 hrs_msm <- hrs_msm |> 
-  bind_cols(age_splines) |>
+  # bind_cols(age_splines) |>
   group_by(hhidpn) |> 
   arrange(age) |> 
   mutate(
@@ -275,7 +279,7 @@ nas <- hrs_msm |>
 # TR: states were interpolated for these cases. To the extent that health covariates
 # are to be treated as "ever" or "destined to / ever" variables, then we should 
 # impute.
-nas[nas > 0]
+# nas[nas > 0]
 # ------------------------------------------------------------------- #
 # Since all health conditions are "ever had" 
 # We can obtain extra 28181 from 99887 missing cases

@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------- #
 # load data
-source("R/01read_and_prepare_hrs.R")
+source("R/01_prepare_hrs.R")
 # ------------------------------------------------------------------- #
 # lets take a look at some results
 # example 1: stratify by sex and use obs_date as a covariate
@@ -9,6 +9,7 @@ source("R/01read_and_prepare_hrs.R")
 # in this example it will return predictions for 2000 2010 and 2020
 # age grid is from 50 to 100
 # natural splines with 3 df
+
 results1 <- hrs_to_fit |>
   fit_msm_models(
     # main part
@@ -22,9 +23,12 @@ results1 <- hrs_to_fit |>
     # splines part
     spline_df     = 3,
     spline_type   = "ns",
-    calc_spline   = FALSE,
-    n_cores       = 1,
+    calc_spline   = TRUE,
+    # CI part
+    n_cores       = 4,
     B             = 2,
+    ci_type       = "bootstrap",
+    conf_level    = 0.95,
     # create Q matrix
     Q = rbind(
       c(0, 0.1, 0.1),  # healthy can go to dementia or death
@@ -33,8 +37,11 @@ results1 <- hrs_to_fit |>
     )
   )
 
+
 # here is the corresponding plot for example 1
 results1 |>
+  # filter the rate (another option is probability - p)
+  filter(type == "q") |>
   mutate(
     to = to |> as.character() |> parse_number(),
     from = from |> as.character() |> parse_number()
@@ -44,7 +51,7 @@ results1 |>
          transition = paste0("haz", from, to)) |>
   ggplot(aes(
     x        = age,
-    y        = rate,
+    y        = estimate,
     color    = transition,
     linetype = Period
   )) +
