@@ -19,7 +19,7 @@ transitions_fit2 <-
   mutate(period = ifelse(obs_date < 2010, "<2010", "2011+")) |>
   # factor it
   mutate(period = as.factor(period)) |> 
-  fit_msm_models(
+  fit_msm(
     strat_vars    = c("female", "period"),
     covariate_var = NULL,
     age_int       = 0.25,
@@ -71,7 +71,7 @@ transitions_fit3 <-
                             between(obs_date,2012,2020) ~ "period 3")) |>
   # factor it
   mutate(period = as.factor(period)) |> 
-  fit_msm_models(
+  fit_msm(
     strat_vars    = c("female", "period"),
     covariate_var = NULL,
     age_int       = 0.25,

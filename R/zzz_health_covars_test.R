@@ -16,7 +16,7 @@ source("R/01read_and_prepare_hrs.R")
 # (1) "hypertension"
 fitted_hyp_strata <-
   hrs_to_fit |> 
-  fit_msm_models(strat_vars    = c("female", "hypertension"),
+  fit_msm(strat_vars    = c("female", "hypertension"),
                       age_int       = 0.25,
                       spline_df     = 3,
                       spline_type   = "ns",
@@ -35,7 +35,7 @@ fitted_hyp_strata <-
 
 fitted_hyp_cov <-
   hrs_to_fit |> 
-  fit_msm_models(strat_vars    = c("female"),
+  fit_msm(strat_vars    = c("female"),
                       covariate_var = c("hypertension"),
                       age_int       = 0.25,
                       spline_df     = 3,
@@ -57,7 +57,7 @@ fitted_hyp_cov <-
   
   fitted_diabetes_strata <-
     hrs_to_fit |> 
-    fit_msm_models(strat_vars    = c("female", "diabetes"),
+    fit_msm(strat_vars    = c("female", "diabetes"),
                         age_int       = 0.25,
                         spline_df     = 3,
                         spline_type   = "ns",
@@ -76,7 +76,7 @@ fitted_hyp_cov <-
   
   fitted_diabetes_cov <-
     hrs_to_fit |> 
-    fit_msm_models(strat_vars    = c("female"),
+    fit_msm(strat_vars    = c("female"),
                         covariate_var = c("diabetes"),
                         age_int       = 0.25,
                         spline_df     = 3,
@@ -98,7 +98,7 @@ fitted_hyp_cov <-
   
   fitted_heart_disease_strata <-
     hrs_to_fit |> 
-    fit_msm_models(strat_vars    = c("female", "heart_disease"),
+    fit_msm(strat_vars    = c("female", "heart_disease"),
                         age_int       = 0.25,
                         spline_df     = 3,
                         spline_type   = "ns",
@@ -117,7 +117,7 @@ fitted_hyp_cov <-
   
   fitted_heart_disease_cov <-
     hrs_to_fit |> 
-    fit_msm_models(strat_vars    = c("female"),
+    fit_msm(strat_vars    = c("female"),
                         covariate_var = c("heart_disease"),
                         age_int       = 0.25,
                         spline_df     = 3,
@@ -138,7 +138,7 @@ fitted_hyp_cov <-
 # (4) "stroke"
   fitted_stroke_strata <-
     hrs_to_fit |> 
-    fit_msm_models(strat_vars    = c("female", "stroke"),
+    fit_msm(strat_vars    = c("female", "stroke"),
                         age_int       = 0.25,
                         spline_df     = 3,
                         spline_type   = "ns",
@@ -157,7 +157,7 @@ fitted_hyp_cov <-
   
   fitted_stroke_cov <-
     hrs_to_fit |> 
-    fit_msm_models(strat_vars    = c("female"),
+    fit_msm(strat_vars    = c("female"),
                         covariate_var = c("stroke"),
                         age_int       = 0.25,
                         spline_df     = 3,

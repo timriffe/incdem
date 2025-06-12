@@ -82,7 +82,7 @@ impute_age <- function(age, wave){
 # and 3 splines exist as covariates by default for now 
 # NOTE: Dont pay attention to warning. IT DOES NOT AFFECT RESULTS
 # I suggest using newly created obs_date as a time variable
-fit_msm_models <- function(.data,
+fit_msm <- function(.data,
                            # main variables
                            strat_vars    = NULL,
                            covariate_var = NULL,
