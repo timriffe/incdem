@@ -89,17 +89,6 @@ hrs_long <-
 # * recode 1/2 = 0 (no dementia), 3 = 1 (dementia)
 # recode cogfunction (1/2 = 0) (3 = 1), gen(cog_dementia)
 # 
-# * forward fill missing values
-# bysort hhid pn (wave): replace cog_dementia = cog_dementia[_n-1] if missing(cog_dementia)
-# 
-# * backward fill remaining missing values
-# gsort hhid pn -wave
-# by hhid pn: replace cog_dementia = cog_dementia[_n-1] if missing(cog_dementia)
-# sort hhid pn wave
-# 
-# * generate running maximum to preserve dementia status
-# gen byte dementia = cog_dementia
-# by hhid pn (wave): replace dementia = cond(dementia[_n-1] > cog_dementia, dementia[_n-1], cog_dementia) if _n > 1
 
 # Cognition: reshape and process
 cog_long <- 
@@ -216,25 +205,11 @@ hrs_joined <- hrs_long |>
  #   summarise(first_dementia_year = min(year), .groups = "drop") |>
  #   filter(first_dementia_year < 2000)
  # early_dementia
-
-# ------------------------------------------------------------------- #
-# PT2
-# ------------------------------------------------------------------- #
-# source("R/00_packages.R")
-# ------------------------------------------------------------------- #
-# Data
-# hrs <- read_csv("Data/riffe_incdem_20250522.csv") |>
-#    mutate(hhidpn = sprintf("%09.0f", hhidpn))
-
-# try R-produced hrs file:
-# hrs <- hrs_joined 
-
 # ------------------------------------------------------------------- #
 # first pass processing
 # hrs_msm <- hrs_joined |>
 hrs_msm <- hrs_joined |> 
   # pick age range to fit to, based on plot of support.
-  # if all ages 
   filter(between(age, 55, 97)) |> 
   mutate(
     int_date         = suppressWarnings(as.integer(int_date)),
