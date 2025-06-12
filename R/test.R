@@ -174,6 +174,45 @@ predict_hazard_and_prob <- function(.x,
     by = join_by(from,to))
 }
 
+predict_hazard_and_prob <- function(.x, .y, age_interval = 0.25, models) {
+  model <- models[[.y$sex]]
+  
+  covariates_row <- .x |>
+    select(starts_with("age_spline")) |>
+    slice(1) |>
+    as.list()
+  names(covariates_row) <- c(paste0("age_spline", 1:3))
+  covariates_row$int_date_decimal <- .y$int_date_decimal
+  
+  # Hazards with CIs
+  qmat_full <- qmatrix.msm(model, covariates = covariates_row, ci = "delta")
+  qmat_est  <- as.data.frame(as.table(qmat_full$estimates))
+  qmat_low  <- as.data.frame(as.table(qmat_full$L))
+  qmat_high <- as.data.frame(as.table(qmat_full$U))
+  
+  q_df <- qmat_est |>
+    rename(from = Var1, to = Var2, rate = Freq) |>
+    mutate(lower_rate = qmat_low$Freq,
+           upper_rate = qmat_high$Freq)
+  
+  # Probabilities with CIs
+  pmat_full <- pmatrix.msm(model, t = age_interval,
+                           covariates = covariates_row, ci = "normal")
+  pmat_est  <- as.data.frame(as.table(pmat_full$estimates))
+  pmat_low  <- as.data.frame(as.table(pmat_full$L))
+  pmat_high <- as.data.frame(as.table(pmat_full$U))
+  
+  p_df <- pmat_est |>
+    rename(from = Var1, to = Var2, prob = Freq) |>
+    mutate(lower_prob = pmat_low$Freq,
+           upper_prob = pmat_high$Freq)
+  
+  # Join both
+  left_join(q_df, p_df, by = c("from", "to"))
+}
+
+
+
 # example code to execute above function on data
 result_df <- prediction_grid |> 
   group_by(sex, age, int_date_decimal) |> 
@@ -184,54 +223,5 @@ result_df <- prediction_grid |>
   ungroup()
 
 
-# some ad hoc visualization code
-result_df |>
-  mutate(from = from |> as.character() |> parse_number(),
-         to =  to |> as.character() |> parse_number(),
-         transition = paste(from, "→", to)) |> 
-  filter(to > from, prob > 0) |> 
-ggplot(aes(x = age, 
-           y = rate, 
-           color = transition, 
-           linetype = as.factor(int_date_decimal))) +
-  geom_line(linewidth = 1) +
-  labs(
-    title = "Estimated Transition Hazards by Age",
-    subtitle = "*Linear time trend",
-    x = "Age",
-    y = "Hazard Rate",
-    color = "Transition"
-  ) +
-  theme_minimal() +
-  scale_y_log10() +
-  facet_wrap(~sex)
+head(result_df)
 
-result_df |>
-  mutate(from = from |> as.character() |> parse_number(),
-         to =  to |> as.character() |> parse_number(),
-         transition = paste(from, "→", to)) |> 
-  filter(to==2,from==1) |> 
-  ggplot(aes(x = age, 
-             y = rate, 
-             color = as.factor(int_date_decimal), 
-             linetype = sex)) +
-  geom_line(linewidth = 1) +
-  labs(
-    title = "Estimated Transition Hazards by Age",
-    subtitle = "*Linear time trend",
-    x = "Age",
-    y = "Hazard Rate",
-    color = "Transition"
-  ) +
-  theme_minimal() +
-  scale_y_log10() 
-# check support; this was used to determine which age range
-# to fit over. Reason: spline tail misbehaves in young ages
-# if all ages are considered.
-hrs_msm |>
-  filter(state_clean == 2) |>
-  count(age_int = floor(age)) |>
-  ggplot(aes(x = age_int, y = n)) +
-  geom_col() +
-  labs(title = "Number of Observations in Dementia by Age",
-       x = "Age", y = "Count")
