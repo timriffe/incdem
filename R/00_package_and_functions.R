@@ -99,9 +99,9 @@ fit_msm_models <- function(.data,
                                 B             = 2,
                                 # create Q matrix
                                 Q = rbind(
-                                  c(0, 0.1, 0.1),  # healthy can go to dementia or death
-                                  c(0, 0,   0.1),  # dementia can go to death
-                                  c(0, 0,   0)     # death is absorbing
+                                  c(-0.2, 0.1, 0.1),  # healthy can go to dementia or death
+                                  c(0, -.01,   0.1),  # dementia can go to death
+                                  c(0, 0,   0)        # death is absorbing
                                 )) {
   
   # finilize the Q matrix
