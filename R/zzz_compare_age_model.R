@@ -155,8 +155,9 @@ compare_age |>
   filter(type == "q",
          from == "State 1",
          to == "State 2") |> 
-  ggplot(aes(x=age,y=estimate,color=age_model)) +
-  geom_line() +
+  ggplot(aes(x=age,y=estimate, fill = age_model)) +
+  geom_line(mapping=aes(color=age_model)) +
   facet_grid(vars(female),vars(period)) +
   theme_minimal() +
-  scale_y_log10()
+  scale_y_log10() +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = .3)
