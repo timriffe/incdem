@@ -3,7 +3,7 @@ library(msm)
 library(tidyverse)
 library(lubridate)
 library(splines)
-hrs <- read_csv("riffe_incdem_20250522.csv")
+hrs <- read_csv("Data/riffe_incdem_20250522.csv")
 
 
 
@@ -61,6 +61,11 @@ hrs_msm <-
   # times as unknown.
   mutate(obstype = ifelse(state_msm == 3,3,1))
 
+hrs_msm <- hrs_msm |>
+  group_by(hhidpn) |> 
+  # supposed to remove solitary observations.
+  filter(n() > 1) |>
+  ungroup()
 
 # Q tells msm what the valid transitions are
 Q <- rbind(
