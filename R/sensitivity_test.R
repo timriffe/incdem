@@ -10,37 +10,41 @@ source("R/01_prepare_hrs.R")
 # age grid is from 50 to 100
 # natural splines with 3 df
 
-results1 <- hrs_to_fit |>
+results1 <- hrs_to_fit |> # .data argument for piping
   fit_msm(
     # main part
-    strat_vars    = c("female"),
-    covariate_var = c("obs_date"),
+    strat_vars    = c("female"), # any vector of stratification variables 
+    covariate_var = c("obs_date"), # any vector of covariates
     # age grid part
-    age_from_to   = c(50, 100),
+    age_from_to   = c(50, 100), # from first to second
     age_int       = 0.25,
     # continuous time grid
-    cont_grid     = c(2000, 2010, 2020),
+    cont_grid     = c(2000, 2010, 2020), # if covariate_var is not continuous set to NULL
     # splines part
-    spline_df     = 3,
-    spline_type   = "ns",
-    calc_spline   = TRUE,
+    spline_df     = 3, # only for calc_spline = T
+    spline_type   = "ns", # only for calc_spline = T
+    calc_spline   = TRUE, # if false it does not matter what spline_df and spline_type are
     # CI part
-    n_cores       = 4,
-    B             = 2,
-    ci_type       = "bootstrap",
-    conf_level    = 0.95,
+    n_cores       = 4, # only used for ci_type = "bootstrap"
+    # notice it is very low for testing
+    B             = 2, # for ci_type = normal and ci_type = bootstrap
+    ci_type       = "normal",
+    conf_level    = 0.95, # also for normal and bootstrap
     # create Q matrix
     Q = rbind(
-      c(0, 0.1, 0.1),  # healthy can go to dementia or death
-      c(0, 0,   0.1),  # dementia can go to death
-      c(0, 0,   0)     # death is absorbing
+      c(-0.2, 0.1, 0.1),  # healthy can go to dementia or death
+      c(0, -.01,   0.1),  # dementia can go to death
+      c(0, 0,   0)        # death is absorbing
     )
   )
 
 
 # here is the corresponding plot for example 1
+# We also have data on lower and upper CI so can plot them too
+# NOTE: the CI will be very jagged since B = 2 is very low for testing speed
+# set to something like 100 or better yet 1000 to make them smooth and nice
 results1 |>
-  # filter the rate (another option is probability - p)
+  # filter the rate option q (another option is probability - p)
   filter(type == "q") |>
   mutate(
     to = to |> as.character() |> parse_number(),
@@ -51,7 +55,7 @@ results1 |>
          transition = paste0("haz", from, to)) |>
   ggplot(aes(
     x        = age,
-    y        = estimate,
+    y        = estimate, # here we can choose lower or upper too
     color    = transition,
     linetype = Period
   )) +
