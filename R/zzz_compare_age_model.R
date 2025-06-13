@@ -17,7 +17,7 @@ p3df4 <-
     age_from_to = c(50, 100),
     calc_spline   = TRUE,
     n_cores       = 4,
-    B             = 12,
+    B             = 40,
     ci_type       = "normal",
     conf_level    = 0.95,
     # create Q matrix
