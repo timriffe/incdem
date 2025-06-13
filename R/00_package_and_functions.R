@@ -16,6 +16,7 @@ library(doParallel)
 library(furrr)
 library(future)
 library(multidplyr)
+library(tictoc)
 # ------parallel# ------------------------------------------------------------------- #
 # impute age using some simple logic
 impute_age <- function(age, wave){
@@ -42,6 +43,74 @@ impute_age <- function(age, wave){
     }
   }
   age
+}
+
+qmatrix.msm_wrapper <- function(x, ci = c("none", "normal", "delta", "bootstrap"),
+                           B = 1000, cores = 1, age_interval = .25, ...) {
+  ci <- match.arg(ci)
+  Q <- NULL
+  
+  if (ci == "normal" && B > 1) {
+    coef_hat <- coef(x)
+    vcov_hat <- vcov(x)
+    sim_pars <- mvtnorm::rmvnorm(B, mean = coef_hat, sigma = vcov_hat)
+    
+    qmat_from_par <- function(pvec) {
+      x_tmp <- x
+      x_tmp$paramdata$opt$par <- pvec
+      suppressWarnings(qmatrix.msm(x_tmp, ci = "none", ...))
+    }
+    
+    if (cores > 1) {
+      if (.Platform$OS.type == "unix") {
+        # this runs more efficiently on linux machines... like mine!
+        qlist <- parallel::mclapply(1:B, function(i) qmat_from_par(sim_pars[i, ], x, ...),
+                                    mc.cores = cores)
+      } else {
+        # this is for Windows machines
+        cl <- parallel::makeCluster(cores)
+        doParallel::registerDoParallel(cl)
+        qlist <- foreach::foreach(i = 1:B, .packages = "msm") %dopar% {
+          qmat_from_par(sim_pars[i, ], x)
+        }
+        parallel::stopCluster(cl)
+      }
+    } else {
+      qlist <- lapply(1:B, function(i) qmat_from_par(sim_pars[i, ]))
+    }
+    
+    qarray <- simplify2array(qlist)
+    Q <- list(
+      estimate = apply(qarray, 1:2, mean, na.rm = TRUE),
+      L = apply(qarray, 1:2, quantile, probs = 0.025, na.rm = TRUE),
+      U = apply(qarray, 1:2, quantile, probs = 0.975, na.rm = TRUE)
+    )
+    
+  } else {
+    Q_res <- qmatrix.msm(x, ci = ci, B = B, cores = cores, ...)
+    if (ci %in% c("delta", "bootstrap", "normal")) {
+      Q <- list(
+        estimate = Q_res$estimates,
+        L = Q_res$L,
+        U = Q_res$U
+      )
+    } else {
+      Q <- list(estimate = Q_res)
+    }
+  }
+  
+  # Always return P also
+  if (!is.null(Q$L) && !is.null(Q$U)) {
+    P <- list(
+      estimate = expm::expm(Q$estimate * age_interval),
+      L = expm::expm(Q$L * age_interval),
+      U = expm::expm(Q$U * age_interval)
+    )
+  } else {
+    P <- list(estimate = expm::expm(Q$estimate * age_interval))
+  }
+  
+  list(Q = Q, P = P)
 }
 
 
@@ -82,7 +151,7 @@ impute_age <- function(age, wave){
 # and 3 splines exist as covariates by default for now 
 # NOTE: Dont pay attention to warning. IT DOES NOT AFFECT RESULTS
 # I suggest using newly created obs_date as a time variable
-fit_msm_models <- function(.data,
+fit_msm <- function(.data,
                            # main variables
                            strat_vars    = NULL,
                            covariate_var = NULL,
@@ -246,7 +315,7 @@ fit_msm_models <- function(.data,
           .x = model,
           .y = data_fit,
           ~ qmatrix.msm(x          = .x, 
-                        covariates = .y)$estimates |>
+                           covariates = .y)$estimates |>
             as.table() |>
             as.data.frame() |>
             rename(from = Var1, 

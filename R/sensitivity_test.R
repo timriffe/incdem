@@ -11,7 +11,7 @@ source("R/01_prepare_hrs.R")
 # natural splines with 3 df
 
 results1 <- hrs_to_fit |>
-  fit_msm_models(
+  fit_msm(
     # main part
     strat_vars    = c("female"),
     covariate_var = c("obs_date"),
@@ -73,7 +73,7 @@ results1 |>
 # NOTE: since there is no continuous covariates  cont_grid is set to NULL
 results2 <- hrs_to_fit |>
   # filter(!is.na(Date), !is.na(hypertension)) |>
-  fit_msm_models(
+  fit_msm(
     strat_vars    = c("female"),
     covariate_var = c("education", "stroke"),
     age_from_to   = c(50, 100),
@@ -128,7 +128,7 @@ results3 <- hrs_to_fit |>
   mutate(Period = as.factor(Period)) |> 
 # Here we use stroke as covariate and sex and Period as stratas
   # filter(!is.na(Date), !is.na(hypertension)) |>
-  fit_msm_models(
+  fit_msm(
     strat_vars    = c("female", "Period"),
     covariate_var = c("stroke"),
     age_from_to   = c(50, 100),
@@ -174,7 +174,7 @@ results3 |>
 # same as 3 but now Period is in covariates
 results4 <- hrs_to_fit |>
   # filter(!is.na(Date), !is.na(hypertension)) |>
-  fit_msm_models(
+  fit_msm(
     strat_vars    = c("female"),
     covariate_var = c("stroke", "Period"),
     age_from_to   = c(50, 100),
