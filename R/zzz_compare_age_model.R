@@ -1,4 +1,4 @@
-
+source("R/00_package_and_functions.R")
 source("R/01_prepare_hrs.R")
 
 p3df4 <-
@@ -17,6 +17,7 @@ p3df4 <-
     age_from_to = c(50, 100),
     calc_spline   = TRUE,
     n_cores       = 4,
+    B             = 12,
     ci_type       = "normal",
     conf_level    = 0.95,
     # create Q matrix
@@ -161,3 +162,15 @@ compare_age |>
   theme_minimal() +
   scale_y_log10() +
   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = .3)
+
+p3df4 |> 
+  filter(type == "q",
+         from == "State 1",
+         to == "State 2") |> 
+  ggplot(aes(x=age,y=estimate)) +
+  geom_line() +
+  facet_grid(vars(female),vars(period)) +
+  theme_minimal() +
+  scale_y_log10() +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = .3)
+

@@ -45,6 +45,73 @@ impute_age <- function(age, wave){
   age
 }
 
+my_qmatrix.msm <- function(x, ci = c("none", "normal", "delta", "bootstrap"),
+                           B = 1000, cores = 1, age_interval = .25, ...) {
+  ci <- match.arg(ci)
+  Q <- NULL
+  
+  if (ci == "normal" && B > 1) {
+    coef_hat <- coef(x)
+    vcov_hat <- vcov(x)
+    sim_pars <- mvtnorm::rmvnorm(B, mean = coef_hat, sigma = vcov_hat)
+    
+    qmat_from_par <- function(pvec) {
+      x_tmp <- x
+      x_tmp$paramdata$opt$par <- pvec
+      suppressWarnings(qmatrix.msm(x_tmp, ci = "none", ...))
+    }
+    
+    qlist <- if (cores > 1) {
+      if (.Platform$OS.type == "unix") {
+        parallel::mclapply(1:B, function(i) qmat_from_par(sim_pars[i, ]),
+                           mc.cores = cores)
+      } else {
+        cl <- parallel::makeCluster(cores)
+        doParallel::registerDoParallel(cl)
+        qlist <- foreach::foreach(i = 1:B, .packages = "msm") %dopar% {
+          qmat_from_par(sim_pars[i, ])
+        }
+        parallel::stopCluster(cl)
+        qlist
+      }
+    } else {
+      lapply(1:B, function(i) qmat_from_par(sim_pars[i, ]))
+    }
+    
+    qarray <- simplify2array(qlist)
+    Q <- list(
+      estimate = apply(qarray, 1:2, mean, na.rm = TRUE),
+      L = apply(qarray, 1:2, quantile, probs = 0.025, na.rm = TRUE),
+      U = apply(qarray, 1:2, quantile, probs = 0.975, na.rm = TRUE)
+    )
+    
+  } else {
+    Q_res <- qmatrix.msm(x, ci = ci, B = B, cores = cores, ...)
+    if (ci %in% c("delta", "bootstrap", "normal")) {
+      Q <- list(
+        estimate = Q_res$estimates,
+        L = Q_res$L,
+        U = Q_res$U
+      )
+    } else {
+      Q <- list(estimate = Q_res)
+    }
+  }
+  
+  # Always compute matrix exponentials
+  if (!is.null(Q$L) && !is.null(Q$U)) {
+    P <- list(
+      estimate = expm::expm(Q$estimate * age_interval),
+      L = expm::expm(Q$L * age_interval),
+      U = expm::expm(Q$U * age_interval)
+    )
+  } else {
+    P <- list(estimate = expm::expm(Q$estimate * age_interval))
+  }
+  
+  list(Q = Q, P = P)
+}
+
 
 #' Fit Multistate Model with Sensitivity to Covariates
 #'
@@ -247,7 +314,7 @@ fit_msm <- function(.data,
           .x = model,
           .y = data_fit,
           ~ qmatrix.msm(x          = .x, 
-                        covariates = .y)$estimates |>
+                           covariates = .y)$estimates |>
             as.table() |>
             as.data.frame() |>
             rename(from = Var1, 
