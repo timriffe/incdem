@@ -61,21 +61,22 @@ qmatrix.msm_wrapper <- function(x, ci = c("none", "normal", "delta", "bootstrap"
       suppressWarnings(qmatrix.msm(x_tmp, ci = "none", ...))
     }
     
-    qlist <- if (cores > 1) {
+    if (cores > 1) {
       if (.Platform$OS.type == "unix") {
-        parallel::mclapply(1:B, function(i) qmat_from_par(sim_pars[i, ]),
-                           mc.cores = cores)
+        # this runs more efficiently on linux machines... like mine!
+        qlist <- parallel::mclapply(1:B, function(i) qmat_from_par(sim_pars[i, ], x, ...),
+                                    mc.cores = cores)
       } else {
+        # this is for Windows machines
         cl <- parallel::makeCluster(cores)
         doParallel::registerDoParallel(cl)
         qlist <- foreach::foreach(i = 1:B, .packages = "msm") %dopar% {
-          qmat_from_par(sim_pars[i, ])
+          qmat_from_par(sim_pars[i, ], x)
         }
         parallel::stopCluster(cl)
-        qlist
       }
     } else {
-      lapply(1:B, function(i) qmat_from_par(sim_pars[i, ]))
+      qlist <- lapply(1:B, function(i) qmat_from_par(sim_pars[i, ]))
     }
     
     qarray <- simplify2array(qlist)
@@ -98,7 +99,7 @@ qmatrix.msm_wrapper <- function(x, ci = c("none", "normal", "delta", "bootstrap"
     }
   }
   
-  # Always compute matrix exponentials
+  # Always return P also
   if (!is.null(Q$L) && !is.null(Q$U)) {
     P <- list(
       estimate = expm::expm(Q$estimate * age_interval),
