@@ -1,8 +1,12 @@
 source("R/00_package_and_functions.R")
 source("R/01_prepare_hrs.R")
 
+# w 4 cores on TR's laptop, this takes > 24hrs to do 100 bootstrap replicates...
+# which is far longer than it would take using a home-brew bootstrap...
 p3df4 <-
   hrs_to_fit |>
+  # this line should always be explicit
+  filter(between(age, 50, 97)) |> 
   # before and after 2010 just as an example
   mutate(period = case_when(between(obs_date,2000,2006) ~ "period 1",
                             between(obs_date,2006,2012) ~ "period 2",
@@ -17,7 +21,7 @@ p3df4 <-
     age_from_to = c(50, 100),
     calc_spline   = TRUE,
     n_cores       = 4,
-    B             = 40,
+    B             = 100,
     ci_type       = "normal",
     conf_level    = 0.95,
     # create Q matrix
@@ -26,7 +30,8 @@ p3df4 <-
       c(0, -.01,   0.1),  # dementia can go to death
       c(0, 0,   0)        # death absorbing
     )
-  )
+  )|> 
+  mutate(age_model = "df4")
 p3df3 <-
   hrs_to_fit |>
   # before and after 2010 just as an example
@@ -42,7 +47,7 @@ p3df3 <-
     spline_type   = "ns",
     age_from_to = c(50, 100),
     calc_spline   = TRUE,
-    n_cores       = 4,
+    B             = 100,
     ci_type       = "normal",
     conf_level    = 0.95,
     # create Q matrix
@@ -51,7 +56,8 @@ p3df3 <-
       c(0, -.01,   0.1),  # dementia can go to death
       c(0, 0,   0)        # death absorbing
     )
-  )
+  )|> 
+  mutate(age_model = "df3")
 
 
 p3df2 <-
@@ -69,7 +75,7 @@ p3df2 <-
     spline_type   = "ns",
     age_from_to = c(50, 100),
     calc_spline   = TRUE,
-    n_cores       = 4,
+    B             = 100,
     ci_type       = "normal",
     conf_level    = 0.95,
     # create Q matrix
@@ -78,7 +84,8 @@ p3df2 <-
       c(0, -.01,   0.1),  # dementia can go to death
       c(0, 0,   0)        # death absorbing
     )
-  )
+  )|> 
+  mutate(age_model = "df2")
 
 
 p3df1 <-
@@ -96,7 +103,7 @@ p3df1 <-
     spline_type   = "ns",
     age_from_to = c(50, 100),
     calc_spline   = TRUE,
-    n_cores       = 4,
+    B             = 100,
     ci_type       = "normal",
     conf_level    = 0.95,
     # create Q matrix
@@ -105,31 +112,32 @@ p3df1 <-
       c(0, -.01,   0.1),  # dementia can go to death
       c(0, 0,   0)        # death absorbing
     )
-  )
-
-p3_linear <-
-  hrs_to_fit |>
-  # before and after 2010 just as an example
-  mutate(period = case_when(between(obs_date,2000,2006) ~ "period 1",
-                            between(obs_date,2006,2012) ~ "period 2",
-                            between(obs_date,2012,2020) ~ "period 3")) |>
-  # factor it
-  mutate(period = as.factor(period)) |> 
-  fit_msm(
-    strat_vars    = c("female", "period"),
-    age_int       = 0.25,
-    age_from_to = c(50, 100),
-    calc_spline   = FALSE,
-    n_cores       = 4,
-    ci_type       = "normal",
-    conf_level    = 0.95,
-    # create Q matrix
-    Q = rbind(
-      c(-0.2, 0.1, 0.1),  # healthy can go to dementia or death
-      c(0, -.01,   0.1),  # dementia can go to death
-      c(0, 0,   0)        # death absorbing
-    )
-  )
+  )|> 
+  mutate(age_model = "df1")
+# 
+# p3_linear <-
+#   hrs_to_fit |>
+#   # before and after 2010 just as an example
+#   mutate(period = case_when(between(obs_date,2000,2006) ~ "period 1",
+#                             between(obs_date,2006,2012) ~ "period 2",
+#                             between(obs_date,2012,2020) ~ "period 3")) |>
+#   # factor it
+#   mutate(period = as.factor(period)) |> 
+#   fit_msm(
+#     strat_vars    = c("female", "period"),
+#     age_int       = 0.25,
+#     age_from_to = c(50, 100),
+#     calc_spline   = FALSE,
+#     B             = 100,
+#     ci_type       = "normal",
+#     conf_level    = 0.95,
+#     # create Q matrix
+#     Q = rbind(
+#       c(-0.2, 0.1, 0.1),  # healthy can go to dementia or death
+#       c(0, -.01,   0.1),  # dementia can go to death
+#       c(0, 0,   0)        # death absorbing
+#     )
+#   )
 p3df4 <- 
   p3df4 |> 
   mutate(age_model = "df4")
@@ -155,7 +163,8 @@ compare_age <- bind_rows(p3df4,
 compare_age |> 
   filter(type == "q",
          from == "State 1",
-         to == "State 2") |> 
+         to == "State 2",
+         age_model != "linear") |> 
   ggplot(aes(x=age,y=estimate, fill = age_model)) +
   geom_line(mapping=aes(color=age_model)) +
   facet_grid(vars(female),vars(period)) +

@@ -14,6 +14,7 @@ vars <- c("hhidpn", "hhid", "pn",
           paste0("r", 5:max_wave, "diabe"),
           paste0("r", 5:max_wave, "hearte"),
           paste0("r", 5:max_wave, "stroke"),
+          paste0("r", 5:max_wave, "wtcrnh"),
           "ragender", "raracem", "rahispan", "rabyear", "raeduc")
 
 # Load main RAND HRS dataset
@@ -63,7 +64,7 @@ hrs_long <- hrs_in |>
     cohort     = hacohort
   ) |>
   pivot_longer(
-    cols = matches("^r\\d{1,2}(iwstat|iwmid|hibpe|diabe|hearte|stroke)$"),
+    cols = matches("^r\\d{1,2}(iwstat|iwmid|hibpe|diabe|hearte|stroke|wtcrnh)$"),
     names_to      = c("wave", ".value"),
     names_pattern = "r(\\d{1,2})([a-z]+)"
   ) |>
@@ -119,22 +120,6 @@ cog_long <- cog |>
   # downup rather than updown: has to do with row ordering not time.
   tidyr::fill(cog_dementia, .direction = "downup") |> 
   mutate(state = cummax(cog_dementia)) |> 
-  
-  # Forward fill
-  # arrange(hhidpn, year) |>
-  # group_by(hhidpn) |>
-  # mutate(cog_dementia = zoo::na.locf(cog_dementia, na.rm = FALSE)) |>
-  # 
-  # # Backward fill
-  # arrange(hhidpn, desc(year)) |>
-  # mutate(cog_dementia = zoo::na.locf(cog_dementia, fromLast = TRUE, na.rm = FALSE)) |>
-  # arrange(hhidpn, year) |>
-  #   # mutate(
-  #   #dementia = cummax(replace_na(cog_dementia, 0)),
-  #   state = dementia
-  # ) |>
-  # Running max and state
-
   ungroup()
 
 # Map year to wave (2000 = wave 5, ..., 2020 = wave 15)
@@ -214,7 +199,7 @@ hrs_joined <- hrs_long |>
 # hrs_msm <- hrs_joined |>
 hrs_msm <- hrs_joined |> 
   # pick age range to fit to, based on plot of support.
-  filter(between(age, 55, 97)) |> 
+  # filter(between(age, 55, 97)) |> 
   mutate(
     int_date         = suppressWarnings(as.integer(int_date)),
     interview_date   = as_date(int_date, origin = "1960-01-01"),
