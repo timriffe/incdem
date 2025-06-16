@@ -289,8 +289,7 @@ predict_hazard_and_prob <- function(.x, .y, age_interval = 0.25, models) {
 # }
 
 
-library(tictoc)
-tic()
+
 result_df <- prediction_grid |> 
   group_by(sex, age, int_date_decimal) |> 
   group_modify(~predict_hazard_and_prob(.x,
@@ -298,7 +297,7 @@ result_df <- prediction_grid |>
                                         age_interval = .25,
                                         models = models)) |> 
   ungroup()
-toc()
+
 
 head(result_df)
 
