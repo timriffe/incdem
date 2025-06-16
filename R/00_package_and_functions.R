@@ -47,6 +47,7 @@ impute_age <- function(age, wave){
   age
 }
 
+# this function possibly deprecate, but it's a nice normal solution.
 qmatrix.msm_wrapper <- function(x, ci = c("none", "normal", "delta", "bootstrap"),
                            B = 1000, cores = 1, age_interval = .25, ...) {
   ci <- match.arg(ci)
