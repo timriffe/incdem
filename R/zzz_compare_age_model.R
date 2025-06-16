@@ -1,4 +1,3 @@
-source("R/00_package_and_functions.R")
 source("R/01_prepare_hrs.R")
 
 # w 4 cores on TR's laptop, this takes > 24hrs to do 100 bootstrap replicates...

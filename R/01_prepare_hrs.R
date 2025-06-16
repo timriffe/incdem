@@ -6,21 +6,21 @@ max_wave <- 16
 hrs_file <- if_else(max_wave == 16, 
                     "randhrs1992_2022v1.dta",
                     "randhrs1992_2020v2.dta")
-vars <- c("hhidpn", "hhid", "pn", 
+hrs_vars <- c("hhidpn", "hhid", "pn", 
           "hacohort", "rabdate", "raddate",
-          paste0("r", 5:max_wave, "iwstat"),
-          paste0("r", 5:max_wave, "iwmid"),
-          paste0("r", 5:max_wave, "hibpe"),
-          paste0("r", 5:max_wave, "diabe"),
-          paste0("r", 5:max_wave, "hearte"),
-          paste0("r", 5:max_wave, "stroke"),
-          paste0("r", 5:max_wave, "wtcrnh"),
+          paste0("r", 1:max_wave, "iwstat"),
+          paste0("r", 1:max_wave, "iwmid"),
+          paste0("r", 1:max_wave, "hibpe"),
+          paste0("r", 1:max_wave, "diabe"),
+          paste0("r", 1:max_wave, "hearte"),
+          paste0("r", 1:max_wave, "stroke"),
+          paste0("r", 1:max_wave, "wtcrnh"),
           "ragender", "raracem", "rahispan", "rabyear", "raeduc")
 
 # Load main RAND HRS dataset
 hrs_in <- read_dta(file.path("Data",hrs_file), 
                    encoding   = "UTF-8", 
-                   col_select = all_of(vars)) |> 
+                   col_select = all_of(hrs_vars)) |> 
   zap_labels() |> 
   mutate(
     hhid   = as.character(hhid),
@@ -148,9 +148,15 @@ hrs_joined <- hrs_long |>
          hypertension  = hibpe_status,
          diabetes      = diabe_status,
          heart_disease = hearte_status,
-         stroke         = stroke_status) |> 
+         stroke        = stroke_status) |> 
   mutate(age = age_imputed) |> 
-  select(-age_imputed)
+  select(-age_imputed) |> 
+  arrange(hhidpn, age) |> 
+  group_by(hhidpn) |> 
+  mutate(wtcrnh = if_else(wtcrnh == 0,NA,wtcrnh)) |> 
+  fill(wtcrnh,.direction="updown") |> 
+  ungroup()
+
 
 # View result
 # write_csv(hrs_joined, "./Data/rand_hrs_processed.csv")
@@ -293,6 +299,7 @@ hrs_to_fit <- hrs_msm |>
   # factor variables
   mutate(across(c(female, race, hispanic, education,
                   hypertension, diabetes, heart_disease,
-                  stroke, ever_dementia), ~ as.factor(.)))
+                  stroke, ever_dementia), ~ as.factor(.))) |> 
+  filter(wave >= 5)
 # ------------------------------------------------------------------- #
 # end prep
