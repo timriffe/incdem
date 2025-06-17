@@ -1,6 +1,6 @@
 
 # whenever we add packages, after installing locally, run renv::snapshot()
-# renv::snapshot()
+# renv::snapshot(force=TRUE)
 
 
 # renv::restore()
@@ -14,11 +14,11 @@ library(haven)
 library(expm)
 library(msm)
 library(zoo)
+library(rsample)
 # these 4 can be commented out !!!!!!
-library(multidplyr)
-library(future)
-library(tictoc)
-library(furrr)
+# library(multidplyr)
+# library(future)
+# library(furrr)
 # ------parallel# ------------------------------------------------------------------- #
 # impute age using some simple logic
 impute_age <- function(age, wave){
@@ -47,6 +47,7 @@ impute_age <- function(age, wave){
   age
 }
 
+# this function possibly deprecate, but it's a nice normal solution.
 qmatrix.msm_wrapper <- function(x, ci = c("none", "normal", "delta", "bootstrap"),
                            B = 1000, cores = 1, age_interval = .25, ...) {
   ci <- match.arg(ci)
