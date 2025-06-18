@@ -16,9 +16,9 @@ library(msm)
 library(zoo)
 library(rsample)
 # these 4 can be commented out !!!!!!
-# library(multidplyr)
-# library(future)
-# library(furrr)
+library(multidplyr)
+library(future)
+library(furrr)
 # ------parallel# ------------------------------------------------------------------- #
 # impute age using some simple logic
 impute_age <- function(age, wave){
@@ -152,402 +152,402 @@ qmatrix.msm_wrapper <- function(x, ci = c("none", "normal", "delta", "bootstrap"
 # it should be something ordinal or nominal like c(2000, 2010) 
 # I assume that age variable is always available in the dataset 
 # I suggest using newly created obs_date as a time variable
-fit_msm <- function(.data, # .data for piping
-                    # main variables
-                    strat_vars    = NULL,
-                    covariate_var = NULL,
-                    # only used for continuous variables
-                    cont_grid     = NULL,
-                    # age grid specification part
-                    age_from_to   = c(50, 100),
-                    age_int       = 0.25,
-                    # spline specification part
-                    spline_df     = NULL,
-                    # do we want to calculate spline at all?
-                    spline_type   = "ns",
-                    calc_spline   = TRUE,
-                    ci_type       = "bootstrap",
-                    n_cores       = 10,
-                    B             = 2,
-                    conf_level    = 0.95,
-                    # create Q matrix
-                    Q = rbind(
-                      c(-0.2, 0.1, 0.1),  # healthy can go to dementia or death
-                      c(0, -.01,   0.1),  # dementia can go to death
-                      c(0, 0,   0)        # death is absorbing
-                    )) {
-  
-  # ------------------------------------------------------------------- #
-  # PT1 - Creating the FIT and PREDICT DATASETS
-  # Allows splines and no splines.
-  # Allows the use of continuous covariate like year e.g. (2010, 2012, 2020)
-  if(!is.null(cont_grid)) {
-    
-    vars <- map(c(strat_vars), ~ unique(na.omit(.data[[.x]])))
-    vars[[(length(vars) + 1)]] <- cont_grid
-    names(vars) <- c(strat_vars, covariate_var)
-    
-    # otherwise we use this part
-  } else { 
-    
-    vars <- map(c(covariate_var, strat_vars),~ unique(na.omit(.data[[.x]]))) |>
-      set_names(c(covariate_var, strat_vars))
-    
-  }
-  
-  # add base predictors. in our model it is age
-  # from age_pred_grid from fisr to last by age_int
-  base_grid <- list(
-    age = seq(age_from_to[1], age_from_to[2], by = age_int)
-  )
-  
-  # construct prediction grid dynamically
-  prediction_grid <- exec(crossing, !!!c(base_grid, vars))
-  
-  if(calc_spline) { 
-    
-    # construct spline basis for age
-    # Here we can also add another types of splines in future
-    # currently only ns or bs
-    # spline_df specified number of splines
-    spline_basis_fit <- get(spline_type)(.data$age, df = spline_df)
-    
-    # predict the spline basis for the age specification
-    spline_basis <-  predict(spline_basis_fit,
-                             newx = prediction_grid$age) |>
-      as_tibble() |>
-      set_names(paste0("age_spline", 1:spline_df))
-    
-    prediction_grid <- bind_cols(prediction_grid, spline_basis)
-    
-    spline_basis_fit <- spline_basis_fit |>
-      as_tibble() |>
-      set_names(paste0("age_spline", 1:spline_df))
-    
-    result <- .data |>
-      bind_cols(spline_basis_fit)
-    
-    # bind data together
-    prediction_grid <- prediction_grid |>
-      # nest data by corresponding covariates
-      group_by(across(all_of(c(strat_vars, covariate_var, "age")))) |>
-      group_nest(keep = TRUE, .key = "data_fit") |>
-      # create a nested list of fitting values
-      mutate(data_fit = map(data_fit, ~ .x |>
-                              dplyr::select(-c(all_of(strat_vars), age)) |>
-                              as.list())
-             )
-    
-  } else { # if we do not want to use splines
-    # The difference here is in the data_fit. Previous removes age, this keeps it
-    
-    spline_basis <- prediction_grid |>
-      dplyr::select(age)
-    
-    # here we assign original data for compatibility with other method
-    result <- .data
-    
-    # bind data together
-    prediction_grid <- prediction_grid |>
-      # nest data by corresponding covariates
-      group_by(across(all_of(c(strat_vars, covariate_var, "age")))) |>
-      group_nest(keep = TRUE, .key = "data_fit") |>
-      # create a nested list of fitting values
-      mutate(data_fit = map(data_fit, ~ .x |>
-                              dplyr::select(-c(all_of(strat_vars))) |>
-                              as.list())
-             )
-  }
-  
-  # ------------------------------------------------------------------- #
-  # PT2 - Estimating the MSM model and prepare the basis for prediction data
-  # create fit model with arbitrary covariates
-  # always assume that age splines are used and age is provided
-  # NOTE: Takes time
-  base_covs   <- names(spline_basis)
-  all_covs    <- c(base_covs, covariate_var)
-  cov_formula <- reformulate(all_covs)
-  
-  # calculate model
-  result <- result |>
-    group_by(across(all_of(strat_vars))) |>
-    group_nest() |>
-    # just in case
-    na.omit() |>
-    # removing solitary observations
-    mutate(data = map(data, ~ .x |> 
-                        group_by(hhidpn) |> 
-                        filter(n() > 1) |> 
-                        ungroup())) |>
-    # modeling
-    mutate(model = map(data,
-                       ~ msm(
-                         formula    = state_msm ~ age,
-                         subject    = hhidpn,
-                         data       = .x,
-                         qmatrix    = Q,
-                         obstype    = obstype,
-                         deathexact = 3,
-                         covariates = cov_formula,
-                         control    = list(fnscale = 5000, 
-                                           maxit   = 25000),
-                         gen.inits  = TRUE,
-                         method     = "BFGS"
-                       )
-    ))
-  
-  # prediction data basis
-  pred <- prediction_grid |>
-    # add our age interval
-    mutate(age_interval = age_int) |>
-    # join the model
-    left_join(result, by = strat_vars)
-  
-  # ------------------------------------------------------------------- #
-  # PT3 - This part is for CI calculation. assign variables to global env
-  # If the method is normal or boot. msm assumes that all the variables
-  # we have used in modelling and etc. are available in global .env.
-  # this is due to windows parralelization routine
-  # So I assign the variables to global and then remove them when we finish
-  assign("cov_formula", cov_formula, envir = .GlobalEnv)
-  assign("Q",           Q,           envir = .GlobalEnv)
-  assign("ci",          ci_type,     envir = .GlobalEnv)
-  assign("cl",          conf_level,  envir = .GlobalEnv)
-  assign("B",           B,           envir = .GlobalEnv)
-  assign("cores",       n_cores,     envir = .GlobalEnv)
-
-  # ------------------------------------------------------------------- #
-  # PT4 Calculate confidence intervals
-  # There are 3 options now none, normal and bootstrapped
-  # if none, we can calculate them directly and very fast using msm functions
-  # Global assignment is not used here
-  if(ci_type == "none") {
-    
-    result_df <- pred |>
-      # First we calculate rate
-      mutate(
-        rate = map2(
-          .x = model,
-          .y = data_fit,
-          ~ qmatrix.msm(x          = .x, 
-                        covariates = .y)$estimates |>
-            as.table() |>
-            as.data.frame() |>
-            rename(from     = Var1, 
-                   to       = Var2, 
-                   estimate = Freq) |>
-            mutate(type = "q")
-        ),
-        # Here we calculate probability
-        prob = pmap(
-          list(model, data_fit, age_interval),
-          ~ pmatrix.msm(x          = ..1, 
-                        t          = ..3, 
-                        covariates = ..2) |>
-            as.table() |>
-            as.data.frame() |>
-            rename(from     = Var1, 
-                   to       = Var2, 
-                   estimate = Freq) |>
-            mutate(type = "p")
-        )) |>
-      mutate(combined_tidy = map2(rate, prob, bind_rows)) |>
-      select(-c(data_fit, age_interval, data, model, rate, prob)) |>
-      unnest(combined_tidy) |>
-      # remove D-D transitions (empty)
-      filter(from != "State 3") |>
-      # remove recovery possibility (empty)
-      filter(!(from == "State 2" & to == "State 1"))
-    
-  } 
-  
-  if(ci_type == "normal") {
-    
-    # here the global assignment is in play. Except for cores argument
-    # But the speed lost so so small, that it is best to follow the unified way
-    pred$q_list <- map2(
-      pred$model,
-      pred$data_fit,
-      ~ qmatrix.msm(x          = .x, 
-                    covariates = .y,
-                    ci         = ci,
-                    cl         = cl,
-                    # no cores argument here
-                    B          = B))
-    
-    # this part is nothing but data cleaning and wrangling
-    # used to return a dataframe with L estimate and U columns from q_list
-    result_df <- pred |>
-      mutate(
-        # this part for q matrix
-        q_tidy = map(q_list, ~ {
-          # extract components
-          lower <- .x$L |>
-            as.data.frame() |>
-            rownames_to_column("from") |>
-            pivot_longer(-from,
-                         names_to  = "to",
-                         values_to = "lower")
-          
-          estimate  <- .x$estimate |>
-            as.data.frame() |>
-            rownames_to_column("from") |>
-            pivot_longer(-from,
-                         names_to  = "to",
-                         values_to = "estimate")
-          
-          upper <- .x$U |>
-            as.data.frame() |>
-            rownames_to_column("from") |>
-            pivot_longer(-from,
-                         names_to  = "to",
-                         values_to = "upper")
-          
-          lower |>
-            left_join(estimate, by = c("from", "to")) |>
-            left_join(upper,    by = c("from", "to")) |>
-            mutate(type = "q")
-        }
-        ))  |> 
-      mutate(
-        # here we calculate p matrix from q using matrix exponentiation
-        p_tidy = map2(q_list, age_interval, ~ {
-          lower <- expm(.x$L * .y) |>
-            as.data.frame() |>
-            rownames_to_column("from") |>
-            pivot_longer(-from, names_to = "to", values_to = "lower")
-          
-          estimate <- expm(.x$estimate * .y) |>
-            as.data.frame() |>
-            rownames_to_column("from") |>
-            pivot_longer(-from, names_to = "to", values_to = "estimate")
-          
-          upper <- expm(.x$U * .y) |>
-            as.data.frame() |>
-            rownames_to_column("from") |>
-            pivot_longer(-from, names_to = "to", values_to = "upper")
-          
-          lower |>
-            left_join(estimate, by = c("from", "to")) |>
-            left_join(upper, by = c("from", "to")) |>
-            mutate(type = "p")
-        }))  |>
-      # bind both dataframes
-      mutate(
-        combined_tidy = map2(q_tidy, p_tidy, bind_rows)) |>
-      # remove intermediate columns
-      select(-c(data_fit, age_interval, data, 
-                model, q_list, q_tidy, p_tidy)) |> 
-      # unnest
-      unnest(combined_tidy) |>
-      # remove D-D transitions (empty)
-      filter(from != "State 3") |>
-      # remove recovery possibility (empty)
-      filter(!(from == "State 2" & to == "State 1")) 
-    
-  } 
-  
-  if(ci_type == "bootstrap") {
-    # The most complex part that uses boots.
-    # here cores arguments is used
-    # takes an ton of time to calculate
-    # here we calculate the rate list
-    # This is the only part that uses bootstrapping and global variables
-    # NOTE: Takes a very long time!
-    
-    # separate nested df into 2 lists
-    # This supposedly facilitates the bootstrap fitting
-    model    <- pred$model
-    data_fit <- pred$data_fit
-    
-    # calculate CI
-    q_list <- map2(
-      model,
-      data_fit,
-      ~ qmatrix.msm(x          = .x,
-                    covariates = .y,
-                    ci         = ci,
-                    cl         = cl,
-                    B          = B,
-                    cores      = cores))
-    
-    # paste q_list back as a corresponding column
-    pred$q_list <- q_list
-    
-    # the rest is the same as in normal CI
-    result_df <- pred |>
-      mutate(
-        # clean and prepare q data
-        q_tidy = map(q_list, ~ {
-          lower <- .x$L |>
-            as.data.frame() |>
-            rownames_to_column("from") |>
-            pivot_longer(-from, names_to = "to", values_to = "lower")
-          
-          estimate <- .x$estimate |>
-            as.data.frame() |>
-            rownames_to_column("from") |>
-            pivot_longer(-from, names_to = "to", values_to = "estimate")
-          
-          upper <- .x$U |>
-            as.data.frame() |>
-            rownames_to_column("from") |>
-            pivot_longer(-from, names_to = "to", values_to = "upper")
-          
-          lower |>
-            left_join(estimate, by = c("from", "to")) |>
-            left_join(upper, by = c("from", "to")) |>
-            mutate(type = "q")
-        }),
-        # use map2 for row-wise age_interval for p calculation
-        p_tidy = map2(q_list, age_interval, ~ {
-          lower <- expm(.x$L * .y) |>
-            as.data.frame() |>
-            rownames_to_column("from") |>
-            pivot_longer(-from, names_to = "to", values_to = "lower")
-          
-          estimate <- expm(.x$estimate * .y) |>
-            as.data.frame() |>
-            rownames_to_column("from") |>
-            pivot_longer(-from, names_to = "to", values_to = "estimate")
-          
-          upper <- expm(.x$U * .y) |>
-            as.data.frame() |>
-            rownames_to_column("from") |>
-            pivot_longer(-from, names_to = "to", values_to = "upper")
-          
-          lower |>
-            left_join(estimate, by = c("from", "to")) |>
-            left_join(upper, by = c("from", "to")) |>
-            mutate(type = "p")
-        })) |>
-      # bind
-      mutate(
-        combined_tidy = map2(q_tidy, p_tidy, bind_rows)
-      ) |>
-      # remove helper columns
-      select(-c(data_fit, age_interval, data, model, 
-                q_list, q_tidy, p_tidy)) |>
-      # unnest
-      unnest(combined_tidy) |>
-      # remove unnecessary transitions
-      filter(from != "State 3") |>
-      filter(!(from == "State 2" & to == "State 1"))
-    
-  }
-  # ------------------------------------------------------------------- #
-  # remove temporary variables from global env
-  on.exit(rm("cov_formula",   envir = .GlobalEnv), add = TRUE)
-  on.exit(rm("Q",             envir = .GlobalEnv), add = TRUE)
-  on.exit(rm("ci",            envir = .GlobalEnv), add = TRUE)
-  on.exit(rm("cl",            envir = .GlobalEnv), add = TRUE)
-  on.exit(rm("B",             envir = .GlobalEnv), add = TRUE)
-  on.exit(rm("cores",         envir = .GlobalEnv), add = TRUE)
-  
-  # return the final dataframe
-  return(result_df)
-  
-}
+# fit_msm <- function(.data, # .data for piping
+#                     # main variables
+#                     strat_vars    = NULL,
+#                     covariate_var = NULL,
+#                     # only used for continuous variables
+#                     cont_grid     = NULL,
+#                     # age grid specification part
+#                     age_from_to   = c(50, 100),
+#                     age_int       = 0.25,
+#                     # spline specification part
+#                     spline_df     = NULL,
+#                     # do we want to calculate spline at all?
+#                     spline_type   = "ns",
+#                     calc_spline   = TRUE,
+#                     ci_type       = "bootstrap",
+#                     n_cores       = 10,
+#                     B             = 2,
+#                     conf_level    = 0.95,
+#                     # create Q matrix
+#                     Q = rbind(
+#                       c(-0.2, 0.1, 0.1),  # healthy can go to dementia or death
+#                       c(0, -.01,   0.1),  # dementia can go to death
+#                       c(0, 0,   0)        # death is absorbing
+#                     )) {
+#   
+#   # ------------------------------------------------------------------- #
+#   # PT1 - Creating the FIT and PREDICT DATASETS
+#   # Allows splines and no splines.
+#   # Allows the use of continuous covariate like year e.g. (2010, 2012, 2020)
+#   if(!is.null(cont_grid)) {
+#     
+#     vars <- map(c(strat_vars), ~ unique(na.omit(.data[[.x]])))
+#     vars[[(length(vars) + 1)]] <- cont_grid
+#     names(vars) <- c(strat_vars, covariate_var)
+#     
+#     # otherwise we use this part
+#   } else { 
+#     
+#     vars <- map(c(covariate_var, strat_vars),~ unique(na.omit(.data[[.x]]))) |>
+#       set_names(c(covariate_var, strat_vars))
+#     
+#   }
+#   
+#   # add base predictors. in our model it is age
+#   # from age_pred_grid from fisr to last by age_int
+#   base_grid <- list(
+#     age = seq(age_from_to[1], age_from_to[2], by = age_int)
+#   )
+#   
+#   # construct prediction grid dynamically
+#   prediction_grid <- exec(crossing, !!!c(base_grid, vars))
+#   
+#   if(calc_spline) { 
+#     
+#     # construct spline basis for age
+#     # Here we can also add another types of splines in future
+#     # currently only ns or bs
+#     # spline_df specified number of splines
+#     spline_basis_fit <- get(spline_type)(.data$age, df = spline_df)
+#     
+#     # predict the spline basis for the age specification
+#     spline_basis <-  predict(spline_basis_fit,
+#                              newx = prediction_grid$age) |>
+#       as_tibble() |>
+#       set_names(paste0("age_spline", 1:spline_df))
+#     
+#     prediction_grid <- bind_cols(prediction_grid, spline_basis)
+#     
+#     spline_basis_fit <- spline_basis_fit |>
+#       as_tibble() |>
+#       set_names(paste0("age_spline", 1:spline_df))
+#     
+#     result <- .data |>
+#       bind_cols(spline_basis_fit)
+#     
+#     # bind data together
+#     prediction_grid <- prediction_grid |>
+#       # nest data by corresponding covariates
+#       group_by(across(all_of(c(strat_vars, covariate_var, "age")))) |>
+#       group_nest(keep = TRUE, .key = "data_fit") |>
+#       # create a nested list of fitting values
+#       mutate(data_fit = map(data_fit, ~ .x |>
+#                               dplyr::select(-c(all_of(strat_vars), age)) |>
+#                               as.list())
+#              )
+#     
+#   } else { # if we do not want to use splines
+#     # The difference here is in the data_fit. Previous removes age, this keeps it
+#     
+#     spline_basis <- prediction_grid |>
+#       dplyr::select(age)
+#     
+#     # here we assign original data for compatibility with other method
+#     result <- .data
+#     
+#     # bind data together
+#     prediction_grid <- prediction_grid |>
+#       # nest data by corresponding covariates
+#       group_by(across(all_of(c(strat_vars, covariate_var, "age")))) |>
+#       group_nest(keep = TRUE, .key = "data_fit") |>
+#       # create a nested list of fitting values
+#       mutate(data_fit = map(data_fit, ~ .x |>
+#                               dplyr::select(-c(all_of(strat_vars))) |>
+#                               as.list())
+#              )
+#   }
+#   
+#   # ------------------------------------------------------------------- #
+#   # PT2 - Estimating the MSM model and prepare the basis for prediction data
+#   # create fit model with arbitrary covariates
+#   # always assume that age splines are used and age is provided
+#   # NOTE: Takes time
+#   base_covs   <- names(spline_basis)
+#   all_covs    <- c(base_covs, covariate_var)
+#   cov_formula <- reformulate(all_covs)
+#   
+#   # calculate model
+#   result <- result |>
+#     group_by(across(all_of(strat_vars))) |>
+#     group_nest() |>
+#     # just in case
+#     na.omit() |>
+#     # removing solitary observations
+#     mutate(data = map(data, ~ .x |> 
+#                         group_by(hhidpn) |> 
+#                         filter(n() > 1) |> 
+#                         ungroup())) |>
+#     # modeling
+#     mutate(model = map(data,
+#                        ~ msm(
+#                          formula    = state_msm ~ age,
+#                          subject    = hhidpn,
+#                          data       = .x,
+#                          qmatrix    = Q,
+#                          obstype    = obstype,
+#                          deathexact = 3,
+#                          covariates = cov_formula,
+#                          control    = list(fnscale = 5000, 
+#                                            maxit   = 25000),
+#                          gen.inits  = TRUE,
+#                          method     = "BFGS"
+#                        )
+#     ))
+#   
+#   # prediction data basis
+#   pred <- prediction_grid |>
+#     # add our age interval
+#     mutate(age_interval = age_int) |>
+#     # join the model
+#     left_join(result, by = strat_vars)
+#   
+#   # ------------------------------------------------------------------- #
+#   # PT3 - This part is for CI calculation. assign variables to global env
+#   # If the method is normal or boot. msm assumes that all the variables
+#   # we have used in modelling and etc. are available in global .env.
+#   # this is due to windows parralelization routine
+#   # So I assign the variables to global and then remove them when we finish
+#   assign("cov_formula", cov_formula, envir = .GlobalEnv)
+#   assign("Q",           Q,           envir = .GlobalEnv)
+#   assign("ci",          ci_type,     envir = .GlobalEnv)
+#   assign("cl",          conf_level,  envir = .GlobalEnv)
+#   assign("B",           B,           envir = .GlobalEnv)
+#   assign("cores",       n_cores,     envir = .GlobalEnv)
+# 
+#   # ------------------------------------------------------------------- #
+#   # PT4 Calculate confidence intervals
+#   # There are 3 options now none, normal and bootstrapped
+#   # if none, we can calculate them directly and very fast using msm functions
+#   # Global assignment is not used here
+#   if(ci_type == "none") {
+#     
+#     result_df <- pred |>
+#       # First we calculate rate
+#       mutate(
+#         rate = map2(
+#           .x = model,
+#           .y = data_fit,
+#           ~ qmatrix.msm(x          = .x, 
+#                         covariates = .y)$estimates |>
+#             as.table() |>
+#             as.data.frame() |>
+#             rename(from     = Var1, 
+#                    to       = Var2, 
+#                    estimate = Freq) |>
+#             mutate(type = "q")
+#         ),
+#         # Here we calculate probability
+#         prob = pmap(
+#           list(model, data_fit, age_interval),
+#           ~ pmatrix.msm(x          = ..1, 
+#                         t          = ..3, 
+#                         covariates = ..2) |>
+#             as.table() |>
+#             as.data.frame() |>
+#             rename(from     = Var1, 
+#                    to       = Var2, 
+#                    estimate = Freq) |>
+#             mutate(type = "p")
+#         )) |>
+#       mutate(combined_tidy = map2(rate, prob, bind_rows)) |>
+#       select(-c(data_fit, age_interval, data, model, rate, prob)) |>
+#       unnest(combined_tidy) |>
+#       # remove D-D transitions (empty)
+#       filter(from != "State 3") |>
+#       # remove recovery possibility (empty)
+#       filter(!(from == "State 2" & to == "State 1"))
+#     
+#   } 
+#   
+#   if(ci_type == "normal") {
+#     
+#     # here the global assignment is in play. Except for cores argument
+#     # But the speed lost so so small, that it is best to follow the unified way
+#     pred$q_list <- map2(
+#       pred$model,
+#       pred$data_fit,
+#       ~ qmatrix.msm(x          = .x, 
+#                     covariates = .y,
+#                     ci         = ci,
+#                     cl         = cl,
+#                     # no cores argument here
+#                     B          = B))
+#     
+#     # this part is nothing but data cleaning and wrangling
+#     # used to return a dataframe with L estimate and U columns from q_list
+#     result_df <- pred |>
+#       mutate(
+#         # this part for q matrix
+#         q_tidy = map(q_list, ~ {
+#           # extract components
+#           lower <- .x$L |>
+#             as.data.frame() |>
+#             rownames_to_column("from") |>
+#             pivot_longer(-from,
+#                          names_to  = "to",
+#                          values_to = "lower")
+#           
+#           estimate  <- .x$estimate |>
+#             as.data.frame() |>
+#             rownames_to_column("from") |>
+#             pivot_longer(-from,
+#                          names_to  = "to",
+#                          values_to = "estimate")
+#           
+#           upper <- .x$U |>
+#             as.data.frame() |>
+#             rownames_to_column("from") |>
+#             pivot_longer(-from,
+#                          names_to  = "to",
+#                          values_to = "upper")
+#           
+#           lower |>
+#             left_join(estimate, by = c("from", "to")) |>
+#             left_join(upper,    by = c("from", "to")) |>
+#             mutate(type = "q")
+#         }
+#         ))  |> 
+#       mutate(
+#         # here we calculate p matrix from q using matrix exponentiation
+#         p_tidy = map2(q_list, age_interval, ~ {
+#           lower <- expm(.x$L * .y) |>
+#             as.data.frame() |>
+#             rownames_to_column("from") |>
+#             pivot_longer(-from, names_to = "to", values_to = "lower")
+#           
+#           estimate <- expm(.x$estimate * .y) |>
+#             as.data.frame() |>
+#             rownames_to_column("from") |>
+#             pivot_longer(-from, names_to = "to", values_to = "estimate")
+#           
+#           upper <- expm(.x$U * .y) |>
+#             as.data.frame() |>
+#             rownames_to_column("from") |>
+#             pivot_longer(-from, names_to = "to", values_to = "upper")
+#           
+#           lower |>
+#             left_join(estimate, by = c("from", "to")) |>
+#             left_join(upper, by = c("from", "to")) |>
+#             mutate(type = "p")
+#         }))  |>
+#       # bind both dataframes
+#       mutate(
+#         combined_tidy = map2(q_tidy, p_tidy, bind_rows)) |>
+#       # remove intermediate columns
+#       select(-c(data_fit, age_interval, data, 
+#                 model, q_list, q_tidy, p_tidy)) |> 
+#       # unnest
+#       unnest(combined_tidy) |>
+#       # remove D-D transitions (empty)
+#       filter(from != "State 3") |>
+#       # remove recovery possibility (empty)
+#       filter(!(from == "State 2" & to == "State 1")) 
+#     
+#   } 
+#   
+#   if(ci_type == "bootstrap") {
+#     # The most complex part that uses boots.
+#     # here cores arguments is used
+#     # takes an ton of time to calculate
+#     # here we calculate the rate list
+#     # This is the only part that uses bootstrapping and global variables
+#     # NOTE: Takes a very long time!
+#     
+#     # separate nested df into 2 lists
+#     # This supposedly facilitates the bootstrap fitting
+#     model    <- pred$model
+#     data_fit <- pred$data_fit
+#     
+#     # calculate CI
+#     q_list <- map2(
+#       model,
+#       data_fit,
+#       ~ qmatrix.msm(x          = .x,
+#                     covariates = .y,
+#                     ci         = ci,
+#                     cl         = cl,
+#                     B          = B,
+#                     cores      = cores))
+#     
+#     # paste q_list back as a corresponding column
+#     pred$q_list <- q_list
+#     
+#     # the rest is the same as in normal CI
+#     result_df <- pred |>
+#       mutate(
+#         # clean and prepare q data
+#         q_tidy = map(q_list, ~ {
+#           lower <- .x$L |>
+#             as.data.frame() |>
+#             rownames_to_column("from") |>
+#             pivot_longer(-from, names_to = "to", values_to = "lower")
+#           
+#           estimate <- .x$estimate |>
+#             as.data.frame() |>
+#             rownames_to_column("from") |>
+#             pivot_longer(-from, names_to = "to", values_to = "estimate")
+#           
+#           upper <- .x$U |>
+#             as.data.frame() |>
+#             rownames_to_column("from") |>
+#             pivot_longer(-from, names_to = "to", values_to = "upper")
+#           
+#           lower |>
+#             left_join(estimate, by = c("from", "to")) |>
+#             left_join(upper, by = c("from", "to")) |>
+#             mutate(type = "q")
+#         }),
+#         # use map2 for row-wise age_interval for p calculation
+#         p_tidy = map2(q_list, age_interval, ~ {
+#           lower <- expm(.x$L * .y) |>
+#             as.data.frame() |>
+#             rownames_to_column("from") |>
+#             pivot_longer(-from, names_to = "to", values_to = "lower")
+#           
+#           estimate <- expm(.x$estimate * .y) |>
+#             as.data.frame() |>
+#             rownames_to_column("from") |>
+#             pivot_longer(-from, names_to = "to", values_to = "estimate")
+#           
+#           upper <- expm(.x$U * .y) |>
+#             as.data.frame() |>
+#             rownames_to_column("from") |>
+#             pivot_longer(-from, names_to = "to", values_to = "upper")
+#           
+#           lower |>
+#             left_join(estimate, by = c("from", "to")) |>
+#             left_join(upper, by = c("from", "to")) |>
+#             mutate(type = "p")
+#         })) |>
+#       # bind
+#       mutate(
+#         combined_tidy = map2(q_tidy, p_tidy, bind_rows)
+#       ) |>
+#       # remove helper columns
+#       select(-c(data_fit, age_interval, data, model, 
+#                 q_list, q_tidy, p_tidy)) |>
+#       # unnest
+#       unnest(combined_tidy) |>
+#       # remove unnecessary transitions
+#       filter(from != "State 3") |>
+#       filter(!(from == "State 2" & to == "State 1"))
+#     
+#   }
+#   # ------------------------------------------------------------------- #
+#   # remove temporary variables from global env
+#   on.exit(rm("cov_formula",   envir = .GlobalEnv), add = TRUE)
+#   on.exit(rm("Q",             envir = .GlobalEnv), add = TRUE)
+#   on.exit(rm("ci",            envir = .GlobalEnv), add = TRUE)
+#   on.exit(rm("cl",            envir = .GlobalEnv), add = TRUE)
+#   on.exit(rm("B",             envir = .GlobalEnv), add = TRUE)
+#   on.exit(rm("cores",         envir = .GlobalEnv), add = TRUE)
+#   
+#   # return the final dataframe
+#   return(result_df)
+#   
+# }
 # ------------------------------------------------------------------- #
 # second version working in new wrapper...
 # breaks!
@@ -820,4 +820,398 @@ fit_msm2 <- function(.data,
   
   # return final result
   return(result_df)
+}
+
+# --------------------------------------------------------------- # 
+# new function for parallel calculation
+
+fit_msm <- function(.data, # .data for piping
+                    # main variables
+                    # independent stratas
+                    strat_vars    = NULL,
+                    # covariates in the msm model
+                    covariate_var = NULL,
+                    # only used for continuous variables
+                    cont_grid     = NULL,
+                    # age grid specification part from, to
+                    age_from_to   = c(50, 100),
+                    # age increment
+                    age_int       = 0.25,
+                    # spline specification part
+                    # do we want to calculate spline at all?
+                    calc_spline   = TRUE,
+                    # what type of spline? ns or bs
+                    spline_type   = "ns",
+                    # number of splines
+                    spline_df     = NULL,
+                    # conf.int calculation part
+                    # do we want to calculate CI at all?
+                    ci            = FALSE,
+                    # if yes, then what number of parralel processes
+                    # do we want to use for msm modelling?
+                    n_cores       = 10,
+                    # if yes specify the number of bootstraps we
+                    # want to calculate our CI with
+                    B             = 2,
+                    # specify confidence level here
+                    conf_level    = 0.95,
+                    # initialize Q matrix
+                    Q = rbind(
+                      c(-0.2, 0.1, 0.1),  # healthy can go to dementia or death
+                      c(0, -.01,   0.1),  # dementia can go to death
+                      c(0, 0,   0)        # death is absorbing
+                    )) {
+  
+  # ------------------------------------------------------------------- #
+  # PT1 - Creating the FIT and PREDICT DATASETS
+  # Allows splines and no splines.
+  # Allows the use of continuous covariate like year e.g. (2010, 2012, 2020)
+  
+  if(!is.null(cont_grid)) {
+    
+    vars <- map(c(strat_vars), ~ unique(na.omit(.data[[.x]])))
+    vars[[(length(vars) + 1)]] <- cont_grid
+    names(vars) <- c(strat_vars, covariate_var)
+    
+    # otherwise we use this part
+  } else { 
+    
+    vars <- map(c(covariate_var, strat_vars),~ unique(na.omit(.data[[.x]]))) |>
+      set_names(c(covariate_var, strat_vars))
+    
+  }
+  
+  # add base predictors. in our model it is age
+  # from age_pred_grid from fisr to last by age_int
+  base_grid <- list(
+    age = seq(age_from_to[1], age_from_to[2], by = age_int)
+  )
+  
+  # construct prediction grid dynamically
+  prediction_grid <- exec(crossing, !!!c(base_grid, vars))
+  
+  if(calc_spline) { 
+    
+    # construct spline basis for age
+    # Here we can also add another types of splines in future
+    # currently only ns or bs
+    # spline_df specified number of splines
+    spline_basis_fit <- get(spline_type)(.data$age, df = spline_df)
+    
+    # predict the spline basis for the age specification
+    spline_basis <-  predict(spline_basis_fit,
+                             newx = prediction_grid$age) |>
+      as_tibble() |>
+      set_names(paste0("age_spline", 1:spline_df))
+    
+    prediction_grid <- bind_cols(prediction_grid, spline_basis)
+    
+    spline_basis_fit <- spline_basis_fit |>
+      as_tibble() |>
+      set_names(paste0("age_spline", 1:spline_df))
+    
+    result <- .data |>
+      bind_cols(spline_basis_fit)
+    
+    # bind data together
+    prediction_grid <- prediction_grid |>
+      # nest data by corresponding covariates
+      group_by(across(all_of(c(strat_vars, covariate_var, "age")))) |>
+      group_nest(keep = TRUE, .key = "data_fit") |>
+      # create a nested list of fitting values
+      mutate(data_fit = map(data_fit, ~ .x |>
+                              dplyr::select(-c(all_of(strat_vars), age)) |>
+                              as.list())
+      )
+    
+  } else { # if we do not want to use splines
+    # The difference here is in the data_fit. Previous removes age, this keeps it
+    
+    spline_basis <- prediction_grid |>
+      dplyr::select(age)
+    
+    # here we assign original data for compatibility with other method
+    result <- .data
+    
+    # bind data together
+    prediction_grid <- prediction_grid |>
+      # nest data by corresponding covariates
+      group_by(across(all_of(c(strat_vars, covariate_var, "age")))) |>
+      group_nest(keep = TRUE, .key = "data_fit") |>
+      # create a nested list of fitting values
+      mutate(data_fit = map(data_fit, ~ .x |>
+                              dplyr::select(-c(all_of(strat_vars))) |>
+                              as.list())
+      )
+  }
+  
+  # ------------------------------------------------------------------- #
+  # PT2 - Specify weather we want ot calculate CI
+  if(ci) { 
+    
+    # if we want, then we create bootstrap resamples with the prespecified B
+    hrs_boot <- group_bootstraps2(result,
+                                  group  = "hhidpn",
+                                  weight = "wtcrnh",
+                                  times  = B)
+    
+    # we collect these resamples into single data
+    hrs_boot <- map(hrs_boot$splits, ~ .x |>
+                      analysis() |>
+                      # Ensure ordering by subject and time
+                      arrange(hhidpn, age)
+    )
+    
+    # and bind them together creating boot id (for parralel)
+    hrs_boot <- hrs_boot |>
+      bind_rows(.id = "boot")
+    
+  } else { 
+    
+    # in other case we have just one boot and we assign B to 1
+    # I do this for code unification
+    hrs_boot <- result |>
+      mutate(boot = 1)
+    
+    B <- 1
+    
+  }
+  
+  # ------------------------------------------------------------------- #
+  # PT3 - Estimating the MSM model and prepare the basis for prediction data
+  # create fit model with arbitrary covariates
+  # always assume that age splines are used and age is provided
+  # NOTE: Takes time
+  
+  # this first part if being calculated anyway
+  # it creates the predict data essentially
+  base_covs   <- names(spline_basis)
+  all_covs    <- c(base_covs, covariate_var)
+  cov_formula <- reformulate(all_covs)
+  
+  # calculate model
+  result <- hrs_boot |>
+    group_by(across(all_of(c("boot", strat_vars)))) |>
+    group_nest() |>
+    # just in case
+    na.omit() |>
+    # removing solitary observations
+    mutate(data = map(data, ~ .x |> 
+                        group_by(hhidpn) |> 
+                        filter(n() > 1) |> 
+                        ungroup())) |>
+    # these steps are used for future parallel processing
+    unnest(data)
+  
+  
+  # here we use parrallel processing to fir our msm models
+  # I use multidplyr currently
+  if(ci) {
+    
+    # make cluster
+    cluster <- new_cluster(n_cores)
+    # export packages to cluster
+    cluster_library(cluster, c("msm", "dplyr", "tidyselect"))
+    
+    # export necessary definitions to each cluster
+    cluster_assign(cluster, Q = Q)
+    cluster_assign(cluster, cov_formula = cov_formula)
+    cluster_assign(cluster, strat_vars  = strat_vars)
+    
+    # partition data into clusters by intersection of boot number and strat_vars
+    result <- result |>
+      group_by(across(all_of(c("boot", strat_vars)))) |>
+      partition(cluster)
+    
+    # fit the model in parallel
+    models <- result |>
+      do(mod = msm(
+        formula    = state_msm ~ age,
+        subject    = hhidpn,
+        data       = .data,
+        qmatrix    = Q,
+        obstype    = obstype,
+        deathexact = 3,
+        covariates = cov_formula,
+        control    = list(fnscale = 5000, 
+                          maxit   = 25000), # ?????
+        gen.inits  = TRUE,
+        method     = "BFGS"
+      )) |> 
+      # this one is for binding
+      mutate(boot = as.numeric(boot))|>
+      # collect data
+      collect()
+    
+  } else { 
+    
+    models <- result |>
+      group_by(across(all_of(c("boot", strat_vars)))) |>
+      do(mod = msm(
+        formula    = state_msm ~ age,
+        subject    = hhidpn,
+        data       = .data,
+        qmatrix    = Q,
+        obstype    = obstype,
+        deathexact = 3,
+        covariates = cov_formula,
+        control    = list(fnscale = 5000, 
+                          maxit   = 25000), #?????
+        gen.inits  = TRUE,
+        method     = "BFGS"
+      )) |>
+      mutate(boot = as.numeric(boot))
+    
+  }
+  
+  # prediction data basis
+  # create copies of data for each bootstrap for CI
+  pred <- crossing(prediction_grid, boot = c(1:B)) |>
+    # join with the model
+    left_join(models, by = c("boot", strat_vars)) |>
+    # calculate q_matrices
+    group_by(across(all_of(c(strat_vars)))) |>
+    mutate(q_list = map2(mod, data_fit, ~
+                           qmatrix.msm(x          = .x,
+                                       covariates = .y)$estimate))
+  
+  # ------------------------------------------------------------------- #
+  # PT4 - Caculate CI.
+  # if true
+  if(ci) {
+    
+    # define upper and lower prob
+    alpha      <- 1 - conf_level
+    lower_prob <- alpha     / 2      
+    upper_prob <- 1 - alpha / 2
+    
+    # tidy q and calculate p
+    result_df <- pred |>
+      # for each age covariate and strata
+      group_by(across(all_of(c(strat_vars, covariate_var, "age")))) |>
+      # calculate q array for all bootstraps
+      summarise(
+        # Collect all bootstrap matrices into a 3D array
+        q_array = list(simplify2array(q_list)), .groups = "drop"
+      ) |>
+      # here we calculate the estimate L and U from for Q our q rray
+      mutate(
+        q_mean  = map(q_array, ~ apply(.x, c(1, 2), mean)),
+        # note use of upper and lower
+        q_lower = map(q_array, ~ apply(.x, c(1, 2), quantile, probs = lower_prob)),
+        q_upper = map(q_array, ~ apply(.x, c(1, 2), quantile, probs = upper_prob))
+      ) |>
+      # this part here is just making q matrices a tidy df
+      # basically the same for estimate L and U
+      mutate(
+        mean_q = map(q_mean, ~ .x |>
+                       as.table() |> 
+                       as.data.frame() |> 
+                       rename(from     = Var1,
+                              to       = Var2,
+                              estimate = Freq)),
+        lower_q = map(q_lower, ~ .x |> 
+                        as.table() |> 
+                        as.data.frame() |> 
+                        rename(from  = Var1, 
+                               to    = Var2, 
+                               lower = Freq)),
+        upper_q = map(q_upper, ~ .x |>
+                        as.table() |> 
+                        as.data.frame() |> 
+                        rename(from  = Var1, 
+                               to    = Var2, 
+                               upper = Freq)),
+        # Combine all q data into a single data frame
+        combined_q = pmap(
+          list(mean_q, lower_q, upper_q), 
+          ~ reduce(list(..1, ..2, ..3), left_join, by = c("from", "to")))
+      ) |>
+      # now we calclate p matrices with expm and our age_int
+      mutate(
+        # exponentiate q matrix and assign age_int
+        mean_p  = map(q_mean, ~ expm(.x * age_int) |>
+                        as.table() |>
+                        as.data.frame() |>
+                        rename(from       = Var1,
+                               to         = Var2,
+                               p_estimate = Freq)),
+        # same for L and U
+        lower_p = map(q_lower, ~ expm(.x * age_int) |>
+                        as.table() |>
+                        as.data.frame() |>
+                        rename(from    = Var1, 
+                               to      = Var2, 
+                               p_lower = Freq)),
+        upper_p = map(q_upper, ~ expm(.x * age_int) |>
+                        as.table() |>
+                        as.data.frame() |>
+                        rename(from    = Var1, 
+                               to      = Var2, 
+                               p_upper = Freq)),
+        # combine all p into single df
+        combined_p = pmap(
+          list(mean_p, lower_p, upper_p), 
+          ~ reduce(list(..1, ..2, ..3), left_join, by = c("from", "to")))
+      ) |>
+      # combine p and q into one df
+      mutate(combined = map2(combined_q, combined_p, ~ .x |>
+                               full_join(.y, by = c("from", "to")))
+      ) |>
+      # select only columns that we need
+      select(all_of(c(strat_vars, covariate_var, "age", "combined"))) |>
+      # unnest combined df
+      unnest(combined)|>
+      # remove D-D transitions (empty)
+      filter(from != "State 3") |>
+      # remove recovery possibility (empty)
+      filter(!(from == "State 2" & to == "State 1"))
+    
+    # if no CI needed
+  } else {
+    
+    # no CI process is simpler
+    result_df <- pred |>
+      # First we calculate q list
+      mutate(
+        q_list = map2(
+          .x = mod,
+          .y = data_fit,
+          ~ qmatrix.msm(x          = .x, 
+                        covariates = .y)$estimates
+        )) |>
+      # tidy it and make it a tibble
+      mutate(mean_q = map(q_list, ~ .x |>
+                            as.table() |>
+                            as.data.frame() |>
+                            rename(from       = Var1, 
+                                   to         = Var2,
+                                   q_estimate = Freq))) |>
+      # calculate p with expm from q and tidy it
+      mutate(
+        mean_p  = map(q_list, ~ expm(.x * age_int) |>
+                        as.table() |>
+                        as.data.frame() |>
+                        rename(
+                          from       = Var1,
+                          to         = Var2,
+                          p_estimate = Freq
+                        ))) |>
+      # here we combine p and q tibbles into one df
+      mutate(combined = map2(mean_q, mean_p, ~ .x |>
+                               left_join(.y, by = c("from", "to")))) |>
+      # remove helper columns
+      select(-c(data_fit, mod, mean_q, mean_p, q_list, boot)) |>
+      # unnest combined df
+      unnest(combined) |>
+      # remove D-D transitions (empty)
+      filter(from != "State 3") |>
+      # remove recovery possibility (empty)
+      filter(!(from == "State 2" & to == "State 1"))
+    
+  }
+  
+  # return the final dataframe
+  return(result_df)
+  
 }
