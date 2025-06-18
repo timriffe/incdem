@@ -24,8 +24,8 @@ Q <- rbind(
 
 # Prepare  list of bootstrap samples
 example <- map(hrs_boot$splits, analysis)
-
-
+print(object.size(hrs_boot),units="Mb")
+print(object.size(example),units="Mb")
 # Function to fit MSM model on a single dataset
 fit_on_split <- function(split_df) {
   # here is it
