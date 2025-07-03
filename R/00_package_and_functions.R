@@ -15,10 +15,12 @@ library(expm)
 library(msm)
 library(zoo)
 library(rsample)
-# these 4 can be commented out !!!!!!
 library(multidplyr)
 library(future)
 library(furrr)
+# this one is for prevalence gam
+library(mgcv)
+
 # ------parallel# ------------------------------------------------------------------- #
 # impute age using some simple logic
 impute_age <- function(age, wave){
@@ -860,7 +862,10 @@ fit_msm <- function(.data, # .data for piping
                       c(-0.2, 0.1, 0.1),  # healthy can go to dementia or death
                       c(0, -.01,   0.1),  # dementia can go to death
                       c(0, 0,   0)        # death is absorbing
-                    )) {
+                    ),
+                    # do we want prevalence or not?
+                    calc_prev = TRUE
+) {
   
   # ------------------------------------------------------------------- #
   # PT1 - Creating the FIT and PREDICT DATASETS
@@ -977,6 +982,9 @@ fit_msm <- function(.data, # .data for piping
     
   }
   
+  # we need this backup data for further prevalence calculation
+  for_prev <- result
+  
   # ------------------------------------------------------------------- #
   # PT3 - Estimating the MSM model and prepare the basis for prediction data
   # create fit model with arbitrary covariates
@@ -989,8 +997,9 @@ fit_msm <- function(.data, # .data for piping
   all_covs    <- c(base_covs, covariate_var)
   cov_formula <- reformulate(all_covs)
   
-  # calculate model
+  # prepare data for model
   result <- hrs_boot |>
+    # mutate(across(all_of(covariate_var), as_factor)) |>
     group_by(across(all_of(c("boot", strat_vars)))) |>
     group_nest() |>
     # just in case
@@ -1002,7 +1011,6 @@ fit_msm <- function(.data, # .data for piping
                         ungroup())) |>
     # these steps are used for future parallel processing
     unnest(data)
-  
   
   # here we use parrallel processing to fir our msm models
   # I use multidplyr currently
@@ -1055,14 +1063,15 @@ fit_msm <- function(.data, # .data for piping
         obstype    = obstype,
         deathexact = 3,
         covariates = cov_formula,
+        # subject.weights = 
         control    = list(fnscale = 5000, 
-                          maxit   = 25000), #?????
+                          maxit   = 25000), # ?????
         gen.inits  = TRUE,
         method     = "BFGS"
       )) |>
       mutate(boot = as.numeric(boot))
     
-  }
+  }  
   
   # prediction data basis
   # create copies of data for each bootstrap for CI
@@ -1161,11 +1170,12 @@ fit_msm <- function(.data, # .data for piping
       # select only columns that we need
       select(all_of(c(strat_vars, covariate_var, "age", "combined"))) |>
       # unnest combined df
-      unnest(combined)|>
-      # remove D-D transitions (empty)
-      filter(from != "State 3") |>
-      # remove recovery possibility (empty)
-      filter(!(from == "State 2" & to == "State 1"))
+      unnest(combined)
+    # |>
+    #   # remove D-D transitions (empty)
+    #   filter(from != "State 3") |>
+    #   # remove recovery possibility (empty)
+    #   filter(!(from == "State 2" & to == "State 1"))
     
     # if no CI needed
   } else {
@@ -1203,13 +1213,109 @@ fit_msm <- function(.data, # .data for piping
       # remove helper columns
       select(-c(data_fit, mod, mean_q, mean_p, q_list, boot)) |>
       # unnest combined df
-      unnest(combined) |>
+      unnest(combined) 
+    # |>
+    #   # remove D-D transitions (empty)
+    #   filter(from != "State 3") |>
+    #   # remove recovery possibility (empty)
+    #   filter(!(from == "State 2" & to == "State 1"))
+    
+  }
+  
+  # prevalence calculation block 
+  # prevalence is calculated from the original dataframe
+  if(calc_prev) {
+    
+    prev <- for_prev |>
+      group_by(hhidpn)|>
+      # remove people who are only shown once in the data (no transition)
+      filter(n() > 1) |>
+      arrange(age) |>
+      # create from variable
+      rename(from = state_msm) |>
+      # create to variable with lead
+      ungroup() |>
+      # number of transitions from for chosen variables
+      count(!!sym(strat_vars), !!sym(covariate_var), from, age) |>
+      # lets take the full years for more stability
+      mutate(age = floor(age)) |>
+      group_by(female, period, from, age) |>
+      summarise(n = sum(n), .groups = "drop") |>
+      group_by(across(all_of(c(strat_vars, covariate_var, "age")))) |>
+      summarise(N = sum(n[from == 2]),
+                # empirical prevalence
+                n = sum(n),
+                .groups = "drop") |>
+      mutate(prev = N / n) |>
+      filter(between(age, age_from_to[1], age_from_to[2]))
+    # spline_age <- ns(prev$age, df = 5)
+    # colnames(spline_age) <-c("age_spline1", "age_spline2", "age_spline3",
+    #                          "age_spline4", "age_spline5")
+    
+    # here we make a dta to predict our prevalence rate
+    new_data <- expand_grid(period = unique(prev$period),
+                            female = unique(prev$female),
+                            age    = seq(age_from_to[1],
+                                         age_from_to[2],
+                                         age_int))
+    
+    # define our formula
+    # I`m not using splines since they add wiggliness and
+    # do not improve fit actually
+    cov_formula <- reformulate(c("age", covariate_var))
+    
+    # fit model
+    prev <- prev |>
+      # cbind(spline_age) |> 
+      # as_tibble() |>
+      group_nest(across(all_of(strat_vars))) |> 
+      # binomial via gam
+      mutate(model = map(data, ~ gam(
+        formula = update(cov_formula, cbind(N, n - N) ~ .),
+        # weights = n,
+        family  = binomial(link = "logit"),
+        data    = .x
+      ))) |> 
+      ungroup() |> 
+      # predict with new_data
+      nest_join(new_data, by = strat_vars) |> 
+      mutate(predicted_data = map2(
+        .x = model,
+        .y = new_data,
+        ~ predict(.x, .y, type = "response")
+      )) |> 
+      mutate(finale = map2(.x = new_data,
+                           .y = predicted_data, ~ .x |> 
+                             mutate(case := .y))) |>
+      dplyr::select(female, finale) |>
+      unnest(finale) |>
+      rename(prevalence = case)
+    
+    result_df <- result_df |>
+      full_join(prev) |>
+      # remove D-D transitions (empty)
+      filter(from != "State 3") |>
+      # remove recovery possibility (empty)
+      filter(!(from == "State 2" & to == "State 1"))
+    
+    # if no prevalence is needed
+  } else { 
+    
+    result_df <- result_df |>
       # remove D-D transitions (empty)
       filter(from != "State 3") |>
       # remove recovery possibility (empty)
       filter(!(from == "State 2" & to == "State 1"))
     
   }
+  
+  # final part is external mortality adjustment
+  # if yes, we need an external data
+  # if(mort_adjust) { 
+  #   
+  #   
+  #   }
+  
   
   # return the final dataframe
   return(result_df)
