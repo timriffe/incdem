@@ -120,9 +120,9 @@ with_boot <- hrs_to_fit_short |>
           # here we calculate CI
           ci            = TRUE, # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
           # next 3 arguments are used
-          n_cores       = 8, 
+          n_cores       = 5, 
           # notice it is very low for testing
-          B             = 10, 
+          B             = 30, 
           conf_level    = 0.95,
           Q = rbind(
             c(-0.2, 0.1, 0.1), 

@@ -302,4 +302,8 @@ hrs_to_fit <- hrs_msm |>
                   stroke, ever_dementia), ~ as.factor(.))) |> 
   filter(wave >= 5)
 # ------------------------------------------------------------------- #
+# Remove unneeded objects: we need to manage memory if bootstrapping! #
+# ------------------------------------------------------------------- #
+rm(list=setdiff(ls(), "hrs_to_fit"))
+gc()
 # end prep
