@@ -145,21 +145,18 @@ fit_msm <- function(
     spline_type   = "ns",
     Q             = default_q
 ) {
-  
-  ## 0) drop NAs in covariates/strata to avoid "Covariate NA unknown"
+  # 0) drop NAs in covariates/strata to avoid "Covariate NA unknown"
   drop_vars <- c(strat_vars, covariate_var)
   if (length(drop_vars)) {
     data <- data %>%
-      dplyr::filter(
-        dplyr::if_all(dplyr::all_of(drop_vars), ~ !is.na(.x))
-      )
+      dplyr::filter(dplyr::if_all(dplyr::all_of(drop_vars), ~ !is.na(.x)))
   }
   
-  ## 1) maybe add splines to the DATA
+  # 1) maybe add splines to the DATA (so model can estimate them)
   spline_names <- character(0)
   basis_fit    <- NULL
   if (!is.null(spline_df)) {
-    spl_out      <- add_splines(
+    spl_out <- add_splines(
       data,
       age_var     = "age",
       spline_type = spline_type,
@@ -170,7 +167,7 @@ fit_msm <- function(
     spline_names <- grep("^age_spline", names(data), value = TRUE)
   }
   
-  ## 2) build flat prediction grid from this data
+  # 2) build prediction grid from the (full) data
   pred_grid <- build_prediction_grid(
     data         = data,
     strat_vars   = strat_vars,
@@ -179,30 +176,21 @@ fit_msm <- function(
     age_int      = age_int
   )
   
-  ## 3) add splines to the prediction grid too
+  # 3) add splines to the GRID too (same basis)
   if (!is.null(spline_df)) {
     pred_grid <- add_splines_to_grid(pred_grid, basis_fit)
   }
   
-  ## 4) now nest so every row has all covariates (including splines)
-  nest_vars <- c(strat_vars, covariate_var, "age")
-  pred_grid <- pred_grid %>%
-    dplyr::group_by(dplyr::across(dplyr::all_of(nest_vars))) %>%
-    dplyr::group_nest(.key = "data_fit") %>%
-    dplyr::mutate(
-      data_fit = purrr::map(.data$data_fit, ~ as.list(.x[1, , drop = FALSE]))
-    )
-  
-  ## 5) fit per stratum in the original data
+  # 4) fit per stratum, then evaluate directly row-by-row
   out <- data %>%
     dplyr::group_by(dplyr::across(dplyr::all_of(strat_vars))) %>%
     dplyr::group_split() %>%
     purrr::map_dfr(function(group_data) {
       
-      # current stratum (e.g. female = 0/1)
-      strat_vals <- group_data[1, strat_vars, drop = FALSE]
+      # current stratum values
+      strat_vals <- if (length(strat_vars)) group_data[1, strat_vars, drop = FALSE] else NULL
       
-      # fit msm with ALL covariates (period + spline cols)
+      # fit msm for this stratum
       mod <- msm_model(
         data         = group_data,
         Q            = Q,
@@ -211,81 +199,79 @@ fit_msm <- function(
       )
       
       # subset prediction grid to this stratum
-      match_rows <- rep(TRUE, nrow(pred_grid))
-      for (v in strat_vars) {
-        match_rows <- match_rows & (pred_grid[[v]] == strat_vals[[v]])
+      pred_sub <- pred_grid
+      if (length(strat_vars)) {
+        for (v in strat_vars) {
+          pred_sub <- pred_sub[pred_sub[[v]] == strat_vals[[v]], , drop = FALSE]
+        }
       }
-      pred_sub <- pred_grid[match_rows, ]
       
-      # evaluate Q for every row in this (stratum-specific) grid
-      pred_sub <- pred_sub %>%
-        dplyr::mutate(
-          q = purrr::map(
-            .data$data_fit,
-            ~{
-              covs <- safe_covariate_list(
-                .x,
-                wanted = c(covariate_var, spline_names)
-              )
-              
-              # robust check for missing/empty covariates
-              bad_cov <- FALSE
-              if (length(covs) == 0L) {
-                bad_cov <- TRUE
-              } else {
-                bad_cov <- any(vapply(
-                  covs,
-                  function(v) {
-                    # empty
-                    if (length(v) == 0L) return(TRUE)
-                    # plain NA
-                    if (is.na(v)) return(TRUE)
-                    # character NA / "NA"
-                    if (is.character(v) && (length(v) == 0L ||
-                                            is.na(v) ||
-                                            v == "NA")) return(TRUE)
-                    FALSE
-                  },
-                  logical(1)
-                ))
-              }
-              
-              if (bad_cov) {
-                return(matrix(NA_real_, nrow = nrow(Q), ncol = ncol(Q)))
-              }
-              
-              # get qmatrix; suppress benign msm warnings
-              qmat <- tryCatch(
-                suppressWarnings(
-                  msm::qmatrix.msm(mod, covariates = covs, ci = "none")
-                ),
-                error = function(e)
-                  matrix(NA_real_, nrow = nrow(Q), ncol = ncol(Q))
-              )
-              
-              if (is.matrix(qmat)) qmat else qmat$estimate
+      # align factor covariates in the grid to the model data
+      if (!is.null(covariate_var)) {
+        for (cv in covariate_var) {
+          if (cv %in% names(group_data) && is.factor(group_data[[cv]])) {
+            pred_sub[[cv]] <- factor(pred_sub[[cv]], levels = levels(group_data[[cv]]))
+          }
+        }
+      }
+      
+      # now evaluate q for each row of pred_sub
+      q_list <- purrr::map(seq_len(nrow(pred_sub)), function(i) {
+        row_i <- pred_sub[i, , drop = FALSE]
+        
+        # build covariate list from this row
+        cov_cols <- c(covariate_var, spline_names)
+        covs <- NULL
+        if (length(cov_cols)) {
+          covs <- lapply(cov_cols, function(cc) row_i[[cc]][[1]])
+          names(covs) <- cov_cols
+        }
+        
+        # check for missing / empty covariates
+        bad_cov <- FALSE
+        if (!is.null(covs) && length(covs)) {
+          for (cc in names(covs)) {
+            v <- covs[[cc]]
+            if (length(v) == 0L || is.na(v) ||
+                (is.character(v) && (is.na(v) || v == "" || v == "NA"))) {
+              bad_cov <- TRUE
+              break
             }
-          )
-        ) %>%
-        dplyr::select(-data_fit)
+          }
+        }
+        
+        if (bad_cov) {
+          return(matrix(NA_real_, nrow = nrow(Q), ncol = ncol(Q)))
+        }
+        
+        qmat <- tryCatch(
+          suppressWarnings(
+            msm::qmatrix.msm(mod, covariates = covs, ci = "none")
+          ),
+          error = function(e)
+            matrix(NA_real_, nrow = nrow(Q), ncol = ncol(Q))
+        )
+        
+        if (is.matrix(qmat)) qmat else qmat$estimate
+      })
       
+      pred_sub$q <- q_list
       pred_sub
     })
   
-  ## 6) tidy to long with hazards
+  # 5) tidy and return
   out %>%
-    dplyr::mutate(haz = purrr::map(q, tidy_q)) %>%
-    tidyr::unnest(haz) %>%
+    dplyr::mutate(haz = purrr::map(.data$q, tidy_q)) %>%
+    tidyr::unnest(.data$haz) %>%
     dplyr::select(
       dplyr::all_of(c(strat_vars, covariate_var,
                       "age", "from", "to", "estimate"))
     ) %>%
-    dplyr::rename(haz = "estimate") %>%
-    dplyr::mutate(
-      from = readr::parse_number(as.character(.data$from)) |> as.integer(),
-      to   = readr::parse_number(as.character(.data$to))   |> as.integer()
-    )
+    dplyr::rename(haz = "estimate")
 }
+
+
+
 
 
 ## ============================================================
@@ -322,27 +308,28 @@ fit_msm_boot <- function(
   
   cat(" Running in parallel with", future::nbrOfWorkers(), "worker(s)\n")
   
-  # --- prebuild reference grid from FULL dataset ---
-  reference_grid <- build_prediction_grid(
+  # build reference grid from FULL data
+  ref_grid <- build_prediction_grid(
     data         = data,
     strat_vars   = strat_vars,
     covariate_var= covariate_var,
     age_from_to  = age_from_to,
     age_int      = age_int
   )
-  # include spline structure if needed
   if (!is.null(spline_df)) {
     spl_out <- add_splines(data,
                            age_var     = "age",
                            spline_type = spline_type,
                            spline_df   = spline_df)
-    reference_grid <- add_splines_to_grid(reference_grid, spl_out$basis_fit)
+    ref_grid <- add_splines_to_grid(ref_grid, spl_out$basis_fit)
   }
   
   results <- furrr::future_map_dfr(
     boot_rset$splits,
     ~{
-      d_resample <- rsample::analysis(.x) |> dplyr::arrange(hhidpn, age)
+      d_resample <- rsample::analysis(.x) %>%
+        dplyr::arrange(hhidpn, age)
+      
       fit_msm(
         data         = d_resample,
         strat_vars   = strat_vars,
@@ -351,29 +338,30 @@ fit_msm_boot <- function(
         age_int      = age_int,
         spline_type  = spline_type,
         spline_df    = spline_df,
-        Q            = Q
+        Q            = Q,
+        pred_grid    = ref_grid   # <--- use the full-data grid here
       )
     },
     .options = furrr::furrr_options(
       seed     = TRUE,
       packages = c("dplyr", "tidyr", "purrr", "msm", "readr", "tibble"),
       globals  = list(
-        fit_msm             = fit_msm,
-        msm_model           = msm_model,
-        tidy_q              = tidy_q,
+        fit_msm               = fit_msm,
+        msm_model             = msm_model,
+        tidy_q                = tidy_q,
         build_prediction_grid = build_prediction_grid,
-        add_splines         = add_splines,
-        add_splines_to_grid = add_splines_to_grid,
-        safe_covariate_list = safe_covariate_list,
-        group_bootstraps2   = group_bootstraps2,
-        reference_grid      = reference_grid,
-        Q                   = Q,
-        age_from_to         = age_from_to,
-        age_int             = age_int,
-        spline_type         = spline_type,
-        spline_df           = spline_df,
-        strat_vars          = strat_vars,
-        covariate_var       = covariate_var
+        add_splines           = add_splines,
+        add_splines_to_grid   = add_splines_to_grid,
+        safe_covariate_list   = safe_covariate_list,
+        group_bootstraps2     = group_bootstraps2,
+        Q                     = Q,
+        ref_grid              = ref_grid,
+        age_from_to           = age_from_to,
+        age_int               = age_int,
+        spline_type           = spline_type,
+        spline_df             = spline_df,
+        strat_vars            = strat_vars,
+        covariate_var         = covariate_var
       )
     ),
     .progress = TRUE,
@@ -392,4 +380,5 @@ fit_msm_boot <- function(
       .groups = "drop"
     )
 }
+
 
