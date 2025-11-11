@@ -36,28 +36,30 @@ no_boot <- hrs_to_fit_short2 |>
 library(tictoc)
 tic()
 booty <- hrs_to_fit_short2 |>
-  fit_msm_boot(strat_vars    = c("female"), 
-          covariate_var = c("period"), 
-          age_from_to   = c(50, 100), 
-          age_int       = 0.25,
-          spline_df     = NULL,    # only for calc_spline = T
-          spline_type   = "ns", # only for calc_spline = T
-          Q = rbind(
-            c(-0.2, 0.1, 0.1),
-            c(0, -.01,   0.1), 
-            c(0, 0,   0) 
-          ),
-          times = 100,
-          weight = "pwt",
-          group = "hhidpn",
-          n_cores = 5)
+  fit_msm_boot(
+    strat_vars    = c("female"),
+    covariate_var = c("period"),
+    age_from_to   = c(50, 100),
+    age_int       = 0.25,
+    spline_df     = 2,          # <--- turn splines ON
+    spline_type   = "ns",
+    Q = rbind(
+      c(-0.2, 0.1, 0.1),
+      c(0,   -.01, 0.1),
+      c(0,    0,   0)
+    ),
+    times   = 10,
+    weight  = "pwt",
+    group   = "hhidpn",
+    n_cores = 5
+  )
 toc()
-
-no_boot |> 
+no_boot$female |> unique()
+booty |> 
   filter(to>from) |> 
-  ggplot(aes(x=age,y=haz,color=interaction(from,to)))+
-  geom_line()#+
-  #geom_ribbon(aes(ymin=haz_l, ymax=haz_u))
+  ggplot(aes(x=age,y=haz,color=interaction(from,to), linetype = female))+
+  geom_line()+
+  geom_ribbon(aes(ymin=haz_l, ymax=haz_u))
 library(tibble)
 library(purrr)
 library(bench)
