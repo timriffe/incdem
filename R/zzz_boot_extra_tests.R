@@ -12,14 +12,17 @@ options(group_boot.verbose = FALSE)
 #          pwt = wtcrnh, age, hypertension:stroke,
 #          state_msm, ever_dementia, obstype, period)
 hrs_to_fit
-
+hrs_to_fit |> 
+  pull(obs_date)
 hrs_to_fit_short2 <- hrs_to_fit |>
   mutate(period = case_when(between(obs_date, 2000, 2010) ~ "period 1",
-                            between(obs_date, 2010, 2019) ~ "period 2"),
+                            between(obs_date, 2010, 2019) ~ "period 2",
+                            TRUE ~ "other"),
          period = as.factor(period)) |>
   select(hhidpn, female, education,
          pwt = wtcrnh, age, hypertension:stroke,
-         state_msm, ever_dementia, obstype, period)
+         state_msm, ever_dementia, obstype, period) |> 
+  filter(period != "other")
 
 hrs_to_fit_short2 |> write_csv("Data/hrs_to_fit_short.csv.gz")
 
@@ -154,7 +157,8 @@ booty <- hrs_to_fit_short2 |>
     n_cores = 2
   )
 head(booty)
-
+hrs_to_fit_short2 |> 
+  filter(is.na(period))
 earlier_attempt<-
 fit_msm(hrs_to_fit_short2,
          strat_vars    = c("female","period"),
@@ -184,3 +188,56 @@ earlier_attempt |>
   # geom_ribbon(aes(ymin=lower, ymax=upper, fill = interaction(from,to))) +
   facet_wrap(period~female)
   
+
+Q3 <- rbind(
+  c(-0.2,  0.1, 0.1),
+  c( 0.0, -0.01, 0.1),
+  c( 0.0,  0.0, 0.0)
+)
+
+# A) build 3 stratified, group boot replicates (by female)
+boot_tbl <- make_stratified_group_boot(
+  data        = hrs_to_fit_short2,
+  id_col      = "hhidpn",
+  strata_vars = c("female"),
+  times       = 3,
+  seed        = 123
+)
+
+str(boot_tbl)
+dim(boot_tbl)
+inspect_bootstrap_reps(boot_tbl, id_col = "hhidpn", cat_covs = c("female","period"))
+boot_tbl$data[[1]]
+
+rep_results <- purrr::imap_dfr(boot_tbl$data[1:3], function(df, i) {
+  cat("\nFitting replicate", i, "...\n")
+  out <- fit_msm_on_dataframe(
+    df,
+    strat_vars    = c("female"),
+    covariate_var = c("age","period"), # linear age + period effect, no splines
+    age_from_to   = c(50,100),
+    age_int       = 0.25,
+    spline_df     = NULL,
+    spline_type   = "ns",
+    Q             = Q3
+  )
+  if (nrow(out)) out$replicate <- i
+  out
+})
+rep_results %>%
+  ungroup() |> 
+  dplyr::filter(from == 1, to == 2) %>%
+  dplyr::group_by(female, period, age) %>%
+  dplyr::summarise(haz = mean(haz, na.rm = TRUE),
+                   haz_l = min(haz, na.rm=TRUE),
+                   haz_u = max(haz, na.rm = TRUE),.groups = "drop") 
+
+rep_results |> 
+  filter(female == 0,
+         to>from) |> 
+  ggplot(aes(x=age,y=haz,group = interaction(period, replicate), color = period)) +
+  geom_line() +
+  facet_wrap(to~from) +
+  scale_y_log10()
+
+

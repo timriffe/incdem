@@ -1,6 +1,144 @@
 ## ============================================================
 ## helpers
 ## ============================================================
+# ---- A. Relabel duplicate subjects in a replicate (robust) ----
+relabel_duplicate_ids <- function(df, id_col = "hhidpn") {
+  id <- rlang::ensym(id_col)
+  # make a vector with the order in which ids appear (with duplicates)
+  ids <- df[[id_col]]
+  # occurrence counter per id in appearance order
+  occ <- ave(seq_along(ids), ids, FUN = seq_along)
+  # build new ids
+  new_ids <- ifelse(occ == 1L, ids, paste0(ids, "_", occ))
+  df[[id_col]] <- new_ids
+  df
+}
+
+# ---- B. Build stratified GROUP bootstrap replicates ----
+#    - group by id_col, but keep original stratum balance in each replicate
+make_stratified_group_boot <- function(data,
+                                       id_col      = "hhidpn",
+                                       strata_vars = c("female"),
+                                       times       = 5,
+                                       seed        = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+  
+  # unique subjects with their strata
+  ids_by_strata <- data %>%
+    dplyr::distinct(dplyr::across(dplyr::all_of(c(id_col, strata_vars))))
+  
+  # split list of IDs by strata combination
+  split_ids <- if (length(strata_vars)) {
+    ids_by_strata %>%
+      dplyr::group_split(dplyr::across(dplyr::all_of(strata_vars)), .keep = TRUE)
+  } else {
+    list(ids_by_strata)
+  }
+  
+  # helper: sample IDs with replacement within each stratum to original count
+  sample_ids_once <- function() {
+    sampled <- lapply(split_ids, function(tbl) {
+      n <- nrow(tbl)
+      tbl[sample.int(n, n, replace = TRUE), , drop = FALSE]
+    })
+    dplyr::bind_rows(sampled)
+  }
+  
+  # generate replicates as full data frames (rows per subject copy)
+  reps <- vector("list", times)
+  for (t in seq_len(times)) {
+    samp_ids <- sample_ids_once()[[id_col]]
+    # bind rows for each selected id occurrence, relabeling duplicates on the fly
+    out <- lapply(seq_along(samp_ids), function(k) {
+      this_id <- samp_ids[k]
+      # take this subject's rows
+      rows <- data[data[[id_col]] == this_id, , drop = FALSE]
+      # occurrence index for this_id up to k
+      occ_k <- sum(samp_ids[seq_len(k)] == this_id)
+      rows[[id_col]] <- if (occ_k == 1L) this_id else paste0(this_id, "_", occ_k)
+      rows
+    })
+    reps[[t]] <- dplyr::bind_rows(out)
+  }
+  
+  tibble::tibble(replicate = seq_len(times), data = reps)
+}
+
+# ---- C. Inspect replicates quickly ----
+inspect_bootstrap_reps <- function(boot_tbl,
+                                   id_col = "hhidpn",
+                                   cat_covs = c("female", "period")) {
+  purrr::imap(boot_tbl$data, function(df, i) {
+    cat("\n=== Replicate", i, "===\n")
+    # ID duplication stats (before relabel: not available; we relabeled within builder)
+    cat("n_rows:", nrow(df), " | n_subjects:", dplyr::n_distinct(df[[id_col]]), "\n")
+    # by-covariate counts
+    for (v in cat_covs) {
+      if (v %in% names(df)) {
+        print(df %>% dplyr::count(.data[[v]], name = "n"))
+      }
+    }
+    # transitions present
+    if (all(c("state_msm", "age") %in% names(df))) {
+      print(table(df$state_msm, useNA = "ifany"))
+    }
+    invisible(NULL)
+  })
+}
+
+# ---- D. Fit msm on a single replicate (sequential, safe) ----
+fit_msm_on_dataframe <- function(df,
+                                 strat_vars    = c("female"),
+                                 covariate_var = c("age", "period"),
+                                 age_from_to   = c(50, 100),
+                                 age_int       = 0.25,
+                                 spline_df     = NULL,
+                                 spline_type   = "ns",
+                                 Q             = NULL) {
+  
+  stopifnot(!is.null(Q))
+  
+  # order within subject by time
+  df <- df %>%
+    dplyr::arrange(hhidpn, age) %>%
+    dplyr::group_by(hhidpn) %>%
+    dplyr::arrange(age, .by_group = TRUE) %>%
+    dplyr::ungroup()
+  
+  # ensure categorical levels come from the full df passed in
+  # (robust if boot replicate misses a level)
+  for (v in covariate_var) {
+    if (is.factor(df[[v]]) || is.character(df[[v]])) {
+      df[[v]] <- factor(df[[v]], levels = unique(df[[v]]))
+    }
+  }
+  for (v in strat_vars) {
+    if (is.factor(df[[v]]) || is.character(df[[v]])) {
+      df[[v]] <- factor(df[[v]], levels = unique(df[[v]]))
+    }
+  }
+  
+  # call your working fit_msm() directly (no parallel, no joining)
+  # NOTE: fit_msm() must be the clean version you said "is currently working"
+  out <- tryCatch(
+    fit_msm(
+      data         = df,
+      strat_vars   = strat_vars,
+      covariate_var= covariate_var,
+      age_from_to  = age_from_to,
+      age_int      = age_int,
+      spline_df    = spline_df,
+      spline_type  = spline_type,
+      Q            = Q
+    ),
+    error = function(e) {
+      message("fit_msm() failed on this replicate: ", conditionMessage(e))
+      tibble::tibble()
+    }
+  )
+  
+  out
+}
 
 build_prediction_grid <- function(data,
                                   strat_vars,
