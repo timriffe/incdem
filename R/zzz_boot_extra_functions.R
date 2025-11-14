@@ -1,144 +1,6 @@
 ## ============================================================
 ## helpers
 ## ============================================================
-# ---- A. Relabel duplicate subjects in a replicate (robust) ----
-relabel_duplicate_ids <- function(df, id_col = "hhidpn") {
-  id <- rlang::ensym(id_col)
-  # make a vector with the order in which ids appear (with duplicates)
-  ids <- df[[id_col]]
-  # occurrence counter per id in appearance order
-  occ <- ave(seq_along(ids), ids, FUN = seq_along)
-  # build new ids
-  new_ids <- ifelse(occ == 1L, ids, paste0(ids, "_", occ))
-  df[[id_col]] <- new_ids
-  df
-}
-
-# ---- B. Build stratified GROUP bootstrap replicates ----
-#    - group by id_col, but keep original stratum balance in each replicate
-make_stratified_group_boot <- function(data,
-                                       id_col      = "hhidpn",
-                                       strata_vars = c("female"),
-                                       times       = 5,
-                                       seed        = NULL) {
-  if (!is.null(seed)) set.seed(seed)
-  
-  # unique subjects with their strata
-  ids_by_strata <- data %>%
-    dplyr::distinct(dplyr::across(dplyr::all_of(c(id_col, strata_vars))))
-  
-  # split list of IDs by strata combination
-  split_ids <- if (length(strata_vars)) {
-    ids_by_strata %>%
-      dplyr::group_split(dplyr::across(dplyr::all_of(strata_vars)), .keep = TRUE)
-  } else {
-    list(ids_by_strata)
-  }
-  
-  # helper: sample IDs with replacement within each stratum to original count
-  sample_ids_once <- function() {
-    sampled <- lapply(split_ids, function(tbl) {
-      n <- nrow(tbl)
-      tbl[sample.int(n, n, replace = TRUE), , drop = FALSE]
-    })
-    dplyr::bind_rows(sampled)
-  }
-  
-  # generate replicates as full data frames (rows per subject copy)
-  reps <- vector("list", times)
-  for (t in seq_len(times)) {
-    samp_ids <- sample_ids_once()[[id_col]]
-    # bind rows for each selected id occurrence, relabeling duplicates on the fly
-    out <- lapply(seq_along(samp_ids), function(k) {
-      this_id <- samp_ids[k]
-      # take this subject's rows
-      rows <- data[data[[id_col]] == this_id, , drop = FALSE]
-      # occurrence index for this_id up to k
-      occ_k <- sum(samp_ids[seq_len(k)] == this_id)
-      rows[[id_col]] <- if (occ_k == 1L) this_id else paste0(this_id, "_", occ_k)
-      rows
-    })
-    reps[[t]] <- dplyr::bind_rows(out)
-  }
-  
-  tibble::tibble(replicate = seq_len(times), data = reps)
-}
-
-# ---- C. Inspect replicates quickly ----
-inspect_bootstrap_reps <- function(boot_tbl,
-                                   id_col = "hhidpn",
-                                   cat_covs = c("female", "period")) {
-  purrr::imap(boot_tbl$data, function(df, i) {
-    cat("\n=== Replicate", i, "===\n")
-    # ID duplication stats (before relabel: not available; we relabeled within builder)
-    cat("n_rows:", nrow(df), " | n_subjects:", dplyr::n_distinct(df[[id_col]]), "\n")
-    # by-covariate counts
-    for (v in cat_covs) {
-      if (v %in% names(df)) {
-        print(df %>% dplyr::count(.data[[v]], name = "n"))
-      }
-    }
-    # transitions present
-    if (all(c("state_msm", "age") %in% names(df))) {
-      print(table(df$state_msm, useNA = "ifany"))
-    }
-    invisible(NULL)
-  })
-}
-
-# ---- D. Fit msm on a single replicate (sequential, safe) ----
-fit_msm_on_dataframe <- function(df,
-                                 strat_vars    = c("female"),
-                                 covariate_var = c("age", "period"),
-                                 age_from_to   = c(50, 100),
-                                 age_int       = 0.25,
-                                 spline_df     = NULL,
-                                 spline_type   = "ns",
-                                 Q             = NULL) {
-  
-  stopifnot(!is.null(Q))
-  
-  # order within subject by time
-  df <- df %>%
-    dplyr::arrange(hhidpn, age) %>%
-    dplyr::group_by(hhidpn) %>%
-    dplyr::arrange(age, .by_group = TRUE) %>%
-    dplyr::ungroup()
-  
-  # ensure categorical levels come from the full df passed in
-  # (robust if boot replicate misses a level)
-  for (v in covariate_var) {
-    if (is.factor(df[[v]]) || is.character(df[[v]])) {
-      df[[v]] <- factor(df[[v]], levels = unique(df[[v]]))
-    }
-  }
-  for (v in strat_vars) {
-    if (is.factor(df[[v]]) || is.character(df[[v]])) {
-      df[[v]] <- factor(df[[v]], levels = unique(df[[v]]))
-    }
-  }
-  
-  # call your working fit_msm() directly (no parallel, no joining)
-  # NOTE: fit_msm() must be the clean version you said "is currently working"
-  out <- tryCatch(
-    fit_msm(
-      data         = df,
-      strat_vars   = strat_vars,
-      covariate_var= covariate_var,
-      age_from_to  = age_from_to,
-      age_int      = age_int,
-      spline_df    = spline_df,
-      spline_type  = spline_type,
-      Q            = Q
-    ),
-    error = function(e) {
-      message("fit_msm() failed on this replicate: ", conditionMessage(e))
-      tibble::tibble()
-    }
-  )
-  
-  out
-}
 
 build_prediction_grid <- function(data,
                                   strat_vars,
@@ -468,199 +330,294 @@ ensure_levels_in_resample <- function(resample,
 ## boot wrapper (this is the one your run is probably picking up
 ## from zzz_boot_test_functions.R, so overwrite it with this)
 ## ============================================================
+# -------------------------------------------------------------------
+# Bootstrap wrapper around fit_msm()
+# -------------------------------------------------------------------
+# -------------------------------------------------------------------
+# Bootstrap wrapper around fit_msm()  — id_col & weights first-class
+# -------------------------------------------------------------------
 fit_msm_boot <- function(
     data,
-    strat_vars    = NULL,
-    covariate_var = NULL,
-    times         = 8,
-    weight        = "pwt",
-    group         = "hhidpn",
-    n_cores       = 4,
+    id_col            = "hhidpn",
+    strat_vars        = NULL,
+    covariate_var     = NULL,
+    age_from_to       = c(50, 100),
+    age_int           = 0.25,
+    spline_df         = NULL,
+    spline_type       = "ns",
     Q,
-    age_from_to   = c(50, 100),
-    age_int       = 0.25,
-    spline_type   = "ns",
-    spline_df     = NULL
+    times             = 8,
+    weight_col        = NULL,
+    n_cores           = 1,
+    ci_level          = 0.95,
+    return_replicates = FALSE,
+    parallel          = c("auto","none","future","mclapply")
 ) {
   
-  # detect categorical covariates from full data
-  cat_covs   <- character(0)
-  cov_levels <- list()
-  if (!is.null(covariate_var)) {
-    for (cv in covariate_var) {
-      if (is.factor(data[[cv]]) || is.character(data[[cv]])) {
-        cat_covs <- c(cat_covs, cv)
-        cov_levels[[cv]] <- unique(data[[cv]])
-      }
-    }
-  }
+  parallel <- match.arg(parallel)
   
-  # 1) master prediction grid (common to all reps)
+  # ---- 0) Master prediction grid so all replicates align ----
   master_grid <- build_prediction_grid(
     data         = data,
     strat_vars   = strat_vars,
     covariate_var= covariate_var,
     age_from_to  = age_from_to,
     age_int      = age_int
-  ) %>%
+  ) |>
     tidyr::crossing(
       from = seq_len(nrow(Q)),
       to   = seq_len(ncol(Q))
-    ) %>%
+    ) |>
     dplyr::mutate(
       from = as.integer(from),
-      to   = as.integer(to),
+      to   = as.integer(to)
+    ) |>
+    dplyr::mutate(
       dplyr::across(dplyr::all_of(strat_vars), as.character),
       dplyr::across(dplyr::all_of(covariate_var), as.character),
-      age  = round(as.numeric(age), 3)
+      age = round(as.numeric(age), 6)
     )
   
-  # make join keys unique even if "age" is in covariate_var
   join_keys <- unique(c(strat_vars, covariate_var, "age", "from", "to"))
+  master_grid <- master_grid |>
+    dplyr::distinct(dplyr::across(dplyr::all_of(join_keys)), .keep_all = TRUE)
   
-  # 2) bootstrap splits
-  boot_rset <- group_bootstraps2(
-    data   = data,
-    group  = group,
-    weight = weight,
-    times  = times
-  )
-  
-  # 3) parallel plan
-  if (Sys.getenv("RSTUDIO") != 1 & .Platform$OS.type == "unix") {
-    future::plan("multicore", workers = n_cores)
+  # ---- 1) Stratified, group bootstrap replicates (weighted if provided) ----
+  # Prefer your rsample-based infra if present; fallback to a weighted builder.
+  boot_tbl <- if (exists("group_bootstraps2", mode = "function")) {
+    rset <- group_bootstraps2(
+      data   = data,
+      group  = id_col,
+      weight = weight_col,
+      times  = times
+    )
+    tibble::tibble(
+      replicate = seq_along(rset$splits),
+      data      = lapply(rset$splits, rsample::analysis)
+    )
   } else {
-    future::plan("multisession", workers = n_cores)
+    # Fallback: stratified, weighted group bootstrap
+    #  - sample IDs with replacement within each stratum
+    #  - size equals # unique IDs in that stratum
+    #  - prob ∝ subject-level mean(weight_col) or equal if NULL
+    if (!length(id_col) || !id_col %in% names(data)) {
+      stop("id_col must be a column in `data`.")
+    }
+    strata_vars <- strat_vars %||% character(0)
+    
+    id_strata <- data |>
+      dplyr::distinct(dplyr::across(dplyr::all_of(c(id_col, strata_vars))))
+    
+    if (!is.null(weight_col) && weight_col %in% names(data)) {
+      id_w <- data |>
+        dplyr::group_by(.data[[id_col]]) |>
+        dplyr::summarise(.w = mean(.data[[weight_col]], na.rm = TRUE), .groups="drop")
+      id_strata <- dplyr::left_join(id_strata, id_w, by = id_col)
+      id_strata$.w[is.na(id_strata$.w)] <- 1
+    } else {
+      id_strata$.w <- 1
+    }
+    
+    split_ids <- if (length(strata_vars)) {
+      id_strata |>
+        dplyr::group_split(dplyr::across(dplyr::all_of(strata_vars)), .keep = TRUE)
+    } else list(id_strata)
+    
+    sample_ids_once <- function() {
+      parts <- lapply(split_ids, function(tbl) {
+        n  <- nrow(tbl)
+        p  <- tbl$.w / sum(tbl$.w)
+        ix <- sample.int(n, n, replace = TRUE, prob = p)
+        tbl[ix, , drop = FALSE]
+      })
+      dplyr::bind_rows(parts)
+    }
+    
+    reps <- vector("list", times)
+    for (t in seq_len(times)) {
+      samp_ids <- sample_ids_once()[[id_col]]
+      # bind rows for each selected id occurrence, relabeling duplicates on the fly
+      out <- lapply(seq_along(samp_ids), function(k) {
+        this_id <- samp_ids[k]
+        rows <- data[data[[id_col]] == this_id, , drop = FALSE]
+        occ_k <- sum(samp_ids[seq_len(k)] == this_id)
+        rows[[id_col]] <- if (occ_k == 1L) this_id else paste0(this_id, "_", occ_k)
+        rows
+      })
+      reps[[t]] <- dplyr::bind_rows(out)
+    }
+    tibble::tibble(replicate = seq_len(times), data = reps)
   }
   
-  cat(" Running in parallel with", future::nbrOfWorkers(), "worker(s)\n")
-  
-  results <- furrr::future_map_dfr(
-    seq_along(boot_rset$splits),
-    ~{
-      sp <- boot_rset$splits[[.x]]
-      d_resample <- rsample::analysis(sp)
-      
-      # 3a) top up missing categorical levels so msm can build contrasts
-      if (length(cat_covs)) {
-        d_resample <- ensure_levels_in_resample(
-          resample     = d_resample,
-          full_data    = data,
-          cat_vars     = cat_covs,
-          n_per_level  = 20
-        )
+  # ---- 2) Per-replicate safe fit (drops constant covariates if needed) ----
+  safe_fit_one <- function(df) {
+    # Order within subject by time
+    df <- df |>
+      dplyr::arrange(.data[[id_col]], age) |>
+      dplyr::group_by(.data[[id_col]]) |>
+      dplyr::arrange(age, .by_group = TRUE) |>
+      dplyr::ungroup()
+    
+    # Attempt fit; if contrasts fail (single-level factor), drop constant covariates
+    try_once <- function(covars) {
+      fit_msm(
+        data          = df,
+        strat_vars    = strat_vars,
+        covariate_var = covars,
+        age_from_to   = age_from_to,
+        age_int       = age_int,
+        spline_df     = spline_df,
+        spline_type   = spline_type,
+        Q             = Q
+      )
+    }
+    
+    out <- tryCatch(try_once(covariate_var), error = identity)
+    
+    if (inherits(out, "error")) {
+      cov_keep <- covariate_var
+      if (length(covariate_var)) {
+        vary <- vapply(covariate_var, function(v) {
+          if (v %in% names(df)) dplyr::n_distinct(df[[v]]) > 1 else FALSE
+        }, logical(1))
+        cov_keep <- covariate_var[vary]
       }
-      
-      # 3b) robust relabel: every repeated id becomes a separate subject
-      d_resample <- d_resample %>%
-        dplyr::group_by(.data[[group]]) %>%
-        dplyr::mutate(.dup_id = dplyr::row_number()) %>%
-        dplyr::ungroup() %>%
+      out <- tryCatch(try_once(cov_keep), error = identity)
+    }
+    
+    if (inherits(out, "error") || !nrow(out)) {
+      master_grid |>
+        dplyr::mutate(haz = NA_real_)
+    } else {
+      out |>
         dplyr::mutate(
-          !!group := dplyr::if_else(
-            .dup_id == 1L,
-            .data[[group]],
-            paste0(.data[[group]], "_", .dup_id)
-          )
-        ) %>%
-        dplyr::select(-.dup_id)
+          dplyr::across(dplyr::all_of(strat_vars), as.character),
+          dplyr::across(dplyr::all_of(covariate_var), as.character),
+          age  = round(as.numeric(age), 6),
+          from = as.integer(from),
+          to   = as.integer(to)
+        ) |>
+        dplyr::right_join(master_grid, by = join_keys) |>
+        dplyr::mutate(haz = as.numeric(haz))
+    }
+  }
+  
+  # ---- 3) Run fits over replicates (optional parallel) ----
+  run_indices <- seq_len(nrow(boot_tbl))
+  run_one <- function(i) {
+    out <- safe_fit_one(boot_tbl$data[[i]])
+    out$replicate <- i
+    out
+  }
+  
+  os_unix    <- .Platform$OS.type == "unix"
+  in_rstudio <- identical(Sys.getenv("RSTUDIO"), "1")
+  
+  # Determine backend
+  if (parallel == "none") {
+    
+    message("▶ Running sequentially on 1 core.")
+    replicates_df <- purrr::map_dfr(run_indices, run_one, .id = NULL)
+    
+  } else if (parallel == "mclapply") {
+    
+    if (!os_unix) {
+      stop("mclapply is only available on Unix (Linux/macOS).")
+    }
+    message("▶ Running with parallel::mclapply on ", n_cores, " cores.")
+    parts <- parallel::mclapply(run_indices, run_one, mc.cores = n_cores)
+    replicates_df <- dplyr::bind_rows(parts)
+    
+  } else if (parallel %in% c("future","auto")) {
+    
+    # Decide which future backend we want
+    if (parallel == "auto") {
+      # auto mode chooses multicore *only* when safe
+      if (os_unix && !in_rstudio) {
+        desired_plan <- "multicore"
+      } else {
+        desired_plan <- "multisession"
+      }
+    } else {
+      # parallel == "future": if user already set a plan, keep it
+      cur_plan <- future::plan()
+      plan_name <- class(cur_plan)[1L]
       
-      # 3c) order within subject
-      d_resample <- d_resample %>%
-        dplyr::arrange(.data[[group]], age) %>%
-        dplyr::group_by(.data[[group]]) %>%
-        dplyr::arrange(age, .by_group = TRUE) %>%
-        dplyr::ungroup()
-      
-      # 3d) re-impose factor levels from full data
-      if (length(cat_covs)) {
-        for (cv in cat_covs) {
-          if (cv %in% names(d_resample)) {
-            d_resample[[cv]] <- factor(d_resample[[cv]],
-                                       levels = cov_levels[[cv]])
-          }
+      if (!identical(plan_name, "sequential")) {
+        # use user’s existing plan
+        desired_plan <- plan_name
+      } else {
+        # decide based on environment
+        if (os_unix && !in_rstudio) {
+          desired_plan <- "multicore"
+        } else {
+          desired_plan <- "multisession"
         }
       }
-      
-      # 3e) safe fit
-      out_i <- tryCatch(
-        {
-          fit_msm(
-            data         = d_resample,
-            strat_vars   = strat_vars,
-            covariate_var= covariate_var,
-            age_from_to  = age_from_to,
-            age_int      = age_int,
-            spline_type  = spline_type,
-            spline_df    = spline_df,
-            Q            = Q
-          ) %>%
-            dplyr::mutate(
-              dplyr::across(dplyr::all_of(strat_vars), as.character),
-              dplyr::across(dplyr::all_of(covariate_var), as.character),
-              age  = round(as.numeric(age), 3),
-              from = as.integer(from),
-              to   = as.integer(to)
-            )
-        },
-        error = function(e) {
-          # fallback: empty hazards for this replicate
-          master_grid %>%
-            dplyr::mutate(haz = NA_real_)
-        }
-      )
-      
-      # 3f) align to master grid
-      master_grid %>%
-        dplyr::distinct(dplyr::across(dplyr::all_of(join_keys)), .keep_all = TRUE) %>%
-        dplyr::left_join(out_i, by = join_keys) %>%
-        dplyr::mutate(replicate = .x)
-    },
-    .options = furrr::furrr_options(
-      seed     = TRUE,
-      packages = c("dplyr","tidyr","purrr","msm","readr","tibble"),
-      globals  = list(
-        fit_msm               = fit_msm,
-        msm_model             = msm_model,
-        tidy_q                = tidy_q,
-        build_prediction_grid = build_prediction_grid,
-        add_splines           = add_splines,
-        add_splines_to_grid   = add_splines_to_grid,
-        safe_covariate_list   = safe_covariate_list,
-        group_bootstraps2     = group_bootstraps2,
-        ensure_levels_in_resample = ensure_levels_in_resample,
-        Q                     = Q,
-        age_from_to           = age_from_to,
-        age_int               = age_int,
-        spline_type           = spline_type,
-        spline_df             = spline_df,
-        strat_vars            = strat_vars,
-        covariate_var         = covariate_var,
-        cat_covs              = cat_covs,
-        cov_levels            = cov_levels,
-        group                 = group,
-        master_grid           = master_grid,
-        join_keys             = join_keys
-      )
-    ),
-    .progress = TRUE,
-    .id       = "replicate"
-  )
+    }
+    
+    # Apply the plan if needed
+    if (desired_plan == "multicore") {
+      message("▶ Setting future plan: multicore (", n_cores, " workers).")
+      future::plan(future::multicore, workers = n_cores)
+    } else if (desired_plan == "multisession") {
+      message("▶ Setting future plan: multisession (", n_cores, " workers).")
+      future::plan(future::multisession, workers = n_cores)
+    } else {
+      message("▶ Using existing user-defined future plan: ", desired_plan)
+    }
+    
+    # guarantee cleanup
+    on.exit(try(future::plan("sequential"), silent = TRUE), add = TRUE)
+    
+    # run in parallel
+    replicates_df <- furrr::future_map_dfr(
+      run_indices,
+      run_one,
+      .options = furrr::furrr_options(seed = TRUE)
+    )
+    
+  } else {
+    
+    stop("Unknown parallel mode: ", parallel)
+    
+  }
   
-  future::plan("sequential")
-  gc()
   
-  # 4) summarise
-  results %>%
-    dplyr::group_by(dplyr::across(dplyr::all_of(join_keys))) %>%
+  # ---- 4) Sanity: do we have variation across replicates? ----
+  # var_check <- replicates_df |>
+  #   dplyr::group_by(dplyr::across(dplyr::all_of(join_keys))) |>
+  #   dplyr::summarise(unique_haz = dplyr::n_distinct(.data$haz[!is.na(.data$haz)]),
+  #                    .groups = "drop")
+  # 
+  # message("✔ Replicate variation summary (unique hazard values per cell):")
+  # print(summary(var_check$unique_haz))
+  
+  # ---- 5) Summarise to bootstrap CIs ----
+  # ---- 5) Summarise to bootstrap CIs (renamed columns) ----
+  alpha <- (1 - ci_level) / 2
+  lo <- alpha
+  hi <- 1 - alpha
+  
+  summary_df <- replicates_df |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(join_keys))) |>
     dplyr::summarise(
-      haz     = mean(haz, na.rm = TRUE),
-      haz_l   = stats::quantile(haz, 0.025, na.rm = TRUE),
-      haz_u   = stats::quantile(haz, 0.975, na.rm = TRUE),
-      n_reps  = sum(!is.na(haz)),
+      hazard = mean(.data$haz, na.rm = TRUE),
+      lower  = stats::quantile(.data$haz, probs = lo, na.rm = TRUE, type = 7),
+      upper  = stats::quantile(.data$haz, probs = hi, na.rm = TRUE, type = 7),
+      n_reps = sum(!is.na(.data$haz)),
       .groups = "drop"
     )
+  
+  if (isTRUE(return_replicates)) {
+    return(list(summary = summary_df, replicates = replicates_df))
+  } else {
+    return(summary_df)
+  }
+  
 }
+
+
 
 
 

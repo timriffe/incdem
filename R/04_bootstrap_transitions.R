@@ -99,7 +99,7 @@ for (i in 1:loop_i){
 # ----------------------------------------------------
 N <- 1000
 n_cores <- 6
-at_a_time <- n_cores * 3
+at_a_time <- n_cores * 2
 loop_i <- ceiling(N / at_a_time)
 
 for (i in 1:loop_i){
