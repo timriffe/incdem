@@ -908,6 +908,162 @@ fit_msm_boot <- function(
   
 }
 
+# -----------------------------------------------------
+# prevalence functions
+# -----------------------------------------------------
+
+
+# 14-11-2025 The below is still untested, as I've got hazard bootstrapping 
+# running in the background. To continue in a later sitting.
+#' Fit age-specific prevalence with GAM
+#'
+#' @param data          Long-format individual data (one bootstrap sample or full data).
+#' @param strat_vars    Character vector of stratification vars (e.g. "female").
+#' @param covariate_var Character vector of covariates (e.g. "period").
+#' @param age_from_to   Numeric length-2, lower/upper bounds of age grid.
+#' @param age_int       Numeric age step for prediction grid.
+#' @param state_var     Name of state variable (default "state_msm").
+#' @param id_col        Subject ID column (default "hhidpn").
+#' @param condition_state Integer code of the "condition" state (default 2).
+#' @param spline_df     Optional degrees of freedom for age spline (NULL = linear age).
+#' @param spline_type   Type of spline for age ("ns" or "bs"), as in fit_msm().
+#'
+#' @return Tibble with strat_vars, covariate_var, age, prevalence.
+fit_prev <- function(
+    data,
+    strat_vars      = NULL,
+    covariate_var   = NULL,
+    age_from_to     = c(50, 100),
+    age_int         = 0.25,
+    state_var       = "state_msm",
+    id_col          = "hhidpn",
+    condition_state = 2L,
+    spline_df       = NULL,
+    spline_type     = "ns"
+) {
+  # --- 0) sanity / NA handling ---------------------------------------------
+  drop_vars <- unique(c(strat_vars, covariate_var, "age", state_var, id_col))
+  if (length(drop_vars)) {
+    data <- data %>%
+      dplyr::filter(dplyr::if_all(dplyr::all_of(drop_vars), ~ !is.na(.x)))
+  }
+  
+  state_sym <- rlang::sym(state_var)
+  id_sym    <- rlang::sym(id_col)
+  
+  # keep only subjects with >1 row (as in student's code)
+  dat_use <- data %>%
+    dplyr::group_by(!!id_sym) %>%
+    dplyr::filter(dplyr::n() > 1) %>%
+    dplyr::ungroup()
+  
+  # --- 1) empirical prevalence by whole year ------------------------------
+  group_vars  <- c(strat_vars, covariate_var, "age")
+  
+  prev_counts <- dat_use %>%
+    # counts by state and age/strata/cov
+    dplyr::count(
+      dplyr::across(dplyr::all_of(group_vars)),
+      !!state_sym,
+      name = "n"
+    ) %>%
+    # use floor(age) for stability
+    dplyr::mutate(age = floor(.data$age)) %>%
+    dplyr::group_by(dplyr::across(dplyr::all_of(c(strat_vars, covariate_var, "age")))) %>%
+    dplyr::summarise(
+      N = sum(n[.data[[state_var]] == condition_state], na.rm = TRUE),
+      n = sum(n,                                   na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    dplyr::mutate(
+      prev = dplyr::if_else(n > 0, N / n, NA_real_)
+    ) %>%
+    dplyr::filter(dplyr::between(age, age_from_to[1], age_from_to[2]))
+  
+  if (!nrow(prev_counts)) {
+    # nothing to fit
+    return(tibble::tibble())
+  }
+  
+  # --- 2) prediction grid (same helper as hazard code) ---------------------
+  new_data <- build_prediction_grid(
+    data          = prev_counts,
+    strat_vars    = strat_vars,
+    covariate_var = covariate_var,
+    age_from_to   = age_from_to,
+    age_int       = age_int
+  )
+  
+  # --- 3) GAM formula with optional spline on age --------------------------
+  # construct age term (linear or spline)
+  age_term <- if (is.null(spline_df)) {
+    "age"
+  } else {
+    if (identical(spline_type, "ns")) {
+      sprintf("splines::ns(age, df = %d)", as.integer(spline_df))
+    } else if (identical(spline_type, "bs")) {
+      sprintf("splines::bs(age, df = %d)", as.integer(spline_df))
+    } else {
+      stop("spline_type must be 'ns' or 'bs'")
+    }
+  }
+  
+  cov_terms <- covariate_var
+  cov_terms <- cov_terms[!is.na(cov_terms) & nzchar(cov_terms)]
+  
+  rhs_terms <- c(age_term, cov_terms)
+  rhs_str   <- paste(rhs_terms, collapse = " + ")
+  
+  form <- stats::as.formula(
+    paste("cbind(N, n - N) ~", rhs_str)
+  )
+  
+  # --- 4) fit per stratum & predict ---------------------------------------
+  
+  # Split by strata (if any), fit a GAM per stratum, then predict on that slice
+  split_prev <- if (length(strat_vars)) {
+    prev_counts %>%
+      dplyr::group_by(dplyr::across(dplyr::all_of(strat_vars))) %>%
+      dplyr::group_split()
+  } else {
+    list(prev_counts)
+  }
+  
+  out_list <- purrr::map(split_prev, function(df_stratum) {
+    # current stratum values
+    strat_vals <- if (length(strat_vars)) df_stratum[1, strat_vars, drop = FALSE] else NULL
+    
+    # fit gam for this stratum
+    mod <- mgcv::gam(
+      formula = form,
+      family  = stats::binomial(link = "logit"),
+      data    = df_stratum
+    )
+    
+    # prediction grid subset for this stratum
+    nd <- new_data
+    if (length(strat_vars)) {
+      for (v in strat_vars) {
+        nd <- nd[nd[[v]] == strat_vals[[v]], , drop = FALSE]
+      }
+    }
+    
+    if (!nrow(nd)) {
+      return(NULL)
+    }
+    
+    nd$prevalence <- stats::predict(mod, newdata = nd, type = "response")
+    nd
+  })
+  
+  out <- out_list %>%
+    purrr::compact() %>%
+    dplyr::bind_rows()
+  
+  # ensure a clean, minimal output
+  out %>%
+    dplyr::select(dplyr::all_of(c(strat_vars, covariate_var, "age", "prevalence")))
+}
 
 
 
