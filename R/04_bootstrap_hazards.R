@@ -133,5 +133,67 @@ for (i in 1:loop_i){
 }
 
 
-# files <- dir("Data/boot_replicates1")
-# booty <- vroom::vroom(file = file.path("Data/boot_replicates1",files))
+# ------------------------------------
+# Explore results
+# ------------------------------------
+
+# per the unadjusted HRS, we have mortality increasing from 2005-2019. 
+# Which it certainly did for some age groups, but not generally so,
+# and not at the pace you see in the data. Ergo, we need to adjust.
+do_this <- FALSE
+if (do_this){
+files <- dir("Data/model1/unadj_haz_replicates")
+booty <- vroom(file = file.path("Data/model1/unadj_haz_replicates",files))
+
+booty |> 
+  filter(to > from) |> 
+  group_by(female, period5, age, from, to) |> 
+  summarize(hazard = median(haz),
+            lower = quantile(haz, .025),
+            upper = quantile(haz, .975), 
+            .groups = "drop") |> 
+  ggplot(aes(x = age, y = hazard, color = interaction(from, to))) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = interaction(from, to)),color="transparent",alpha = .3) +
+  facet_grid(vars(period5),vars(female)) +
+  scale_y_log10()
+
+rm(booty);gc()
+files2 <- dir("Data/model2/unadj_haz_replicates")
+booty2 <- vroom(file = file.path("Data/model2/unadj_haz_replicates",files2))
+
+booty2 |> 
+  filter(to > from,
+         year %% 5 == 0) |> 
+  group_by(female, year, age, from, to) |> 
+  summarize(hazard = median(haz),
+            lower = quantile(haz, .025),
+            upper = quantile(haz, .975), 
+            .groups = "drop") |> 
+  mutate(transition = paste0("h",from,to)) |> 
+  ggplot(aes(x = age, y = hazard, color = as.factor(year))) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = as.factor(year)),color="transparent",alpha = .3) +
+  facet_grid(vars(transition),vars(female)) +
+  scale_y_log10()
+rm(booty2);gc()
+
+
+files3 <- dir("Data/model3/unadj_haz_replicates")
+booty3 <- vroom(file = file.path("Data/model3/unadj_haz_replicates",files3))
+booty3 |> 
+  filter(to > from,
+         year %% 5 == 0) |> 
+  group_by(female, year, age, from, to) |> 
+  summarize(hazard = median(haz),
+            lower = quantile(haz, .025),
+            upper = quantile(haz, .975), 
+            .groups = "drop") |> 
+  mutate(transition = paste0("h",from,to)) |> 
+  ggplot(aes(x = age, y = hazard, color = as.factor(year))) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = as.factor(year)),color="transparent",alpha = .3) +
+  facet_grid(vars(transition),vars(female)) +
+  scale_y_log10()
+rm(booty3);gc()
+}
