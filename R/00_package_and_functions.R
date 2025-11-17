@@ -393,20 +393,45 @@ msm_model <- function(data, Q, covariate_var, extra_covars = NULL) {
     cov_form <- stats::reformulate(all_covs)
   }
   
-  suppressWarnings(
-    msm::msm(
-      formula    = state_msm ~ age,
-      subject    = hhidpn,
-      data       = data,
-      qmatrix    = Q,
-      obstype    = obstype,
-      deathexact = 3,
-      covariates = cov_form,
-      control    = list(fnscale = 5000, maxit = 25000),
-      gen.inits  = TRUE,
-      method     = "BFGS"
-    )
+  # ---- SAFE WRAPPER ---------------------------------------------------------
+  fit <- tryCatch(
+    suppressWarnings(
+      msm::msm(
+        formula    = state_msm ~ age,
+        subject    = hhidpn,
+        data       = data,
+        qmatrix    = Q,
+        obstype    = obstype,
+        deathexact = 3,
+        covariates = cov_form,
+        control    = list(fnscale = 5000, maxit = 25000),
+        gen.inits  = TRUE,
+        method     = "BFGS"
+      )
+    ),
+    
+    error = function(e) {
+      # Try to print helpful stratum info if available
+      strat_info <- ""
+      if ("female" %in% names(data)) {
+        strat_info <- paste0(strat_info, " female=", paste(unique(data$female), collapse=","), ";")
+      }
+      if ("period5" %in% names(data)) {
+        strat_info <- paste0(strat_info, " period5=", paste(unique(data$period5), collapse=","), ";")
+      }
+      
+      message(
+        "msm_model(): failed to fit MSM for stratum [",
+        strat_info,
+        "] with error: ", conditionMessage(e)
+      )
+      
+      return(NULL)
+    }
   )
+  
+  # ---------------------------------------------------------------------------
+  fit
 }
 
 safe_covariate_list <- function(x, wanted = NULL) {
