@@ -874,16 +874,14 @@ fit_msm_boot <- function(
   # ---- 2) Evaluate across replicates (serial or parallel) ----
   
   eval_serial <- function(boot_tbl) {
-    boot_tbl %>%
-      dplyr::group_by(replicate) %>%
-      dplyr::group_modify(
-        ~ fit_msm_on_split(
-          split   = .x$split[[1]],
-          rep_idx = .y$replicate[[1]]
-        )
-      ) %>%
-      dplyr::ungroup()
+    # boot_tbl has one row per replicate with columns: replicate, split
+    purrr::map2_dfr(
+      .x = boot_tbl$split,
+      .y = boot_tbl$replicate,
+      .f = ~ fit_msm_on_split(split = .x, rep_idx = .y)
+    )
   }
+  
   
   eval_future <- function(boot_tbl) {
     furrr::future_map_dfr(
