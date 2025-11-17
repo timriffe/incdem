@@ -63,7 +63,7 @@ for (i in seq_len(loop_i)) {
       weight_col        = "pwt",
       id_col            = "hhidpn",
       n_cores           = n_cores,
-      parallel          = "none",
+      parallel          = "mclapply",
       return_replicates = TRUE,
       boot_rset         = boot_slice
     )
