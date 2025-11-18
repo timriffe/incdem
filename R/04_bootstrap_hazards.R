@@ -26,7 +26,7 @@ boot_design <- group_bootstraps2(
 )
 
 # ----------------------------------------------------
-# (1) age linear, 5-year period as strata
+# (1) age linear, 5-year period as strata (~2.5 hrs on TR's laptop using 6 cores)
 # ----------------------------------------------------
 unlink("Data/model1/unadj_haz_replicates", recursive = TRUE)
 dir.create("Data/model1/unadj_haz_replicates")
@@ -78,15 +78,13 @@ for (i in seq_len(loop_i)) {
   
   rm(booty); gc()
 }
-
-booty <- vroom::vroom("Data/model1/unadj_haz_replicates/")
-
-
-write_csv("Data/model1/unadj_haz_replicates.csv.gz")
+files <- file.path("Data/model1/unadj_haz_replicates",dir("Data/model1/unadj_haz_replicates"))
+booty <- vroom::vroom(files)
+write_csv(booty, file = "Data/model1/unadj_haz_replicates.csv.gz")
 unlink("Data/model1/unadj_haz_replicates", recursive = TRUE)
 rm(booty); gc()
 # ----------------------------------------------------
-# (2) age linear, year linear
+# (2) age linear, year linear (3+ hrs on 6 core's TR's laptop)
 # ----------------------------------------------------
 unlink("Data/model2/unadj_haz_replicates", recursive = TRUE)
 dir.create("Data/model2/unadj_haz_replicates")
@@ -129,23 +127,24 @@ for (i in 1:loop_i){
   addi  <- fromi - 1
   booty$replicates$replicate <- booty$replicates$replicate + addi
   namei <- paste0("replicates_",fromi,"-",toi,".csv.gz")
-  write_csv(booty$replicates, file = file.path("Data/boot_replicates2", namei))
+  write_csv(booty$replicates, file = file.path("Data/model2/unadj_haz_replicates", namei))
   rm(booty); gc()
 }
-booty <- vroom::vroom("Data/model2/unadj_haz_replicates/")
-write_csv("Data/model2/unadj_haz_replicates.csv.gz")
+files <- file.path("Data/model2/unadj_haz_replicates",dir("Data/model2/unadj_haz_replicates"))
+booty <- vroom::vroom(files)
+write_csv(booty,file="Data/model2/unadj_haz_replicates.csv.gz")
 unlink("Data/model2/unadj_haz_replicates", recursive = TRUE)
 rm(booty); gc()
 
 # ----------------------------------------------------
-# (3) age spline df2, year linear
+# (3) age spline df2, year linear (est 14-15 hrs on 7 cores TR's laptop)
 # ----------------------------------------------------
 
 unlink("Data/model3/unadj_haz_replicates", recursive = TRUE)
 dir.create("Data/model3/unadj_haz_replicates")
 
 N          <- length(boot_design$splits)
-n_cores    <- 6
+n_cores    <- 7
 at_a_time  <- n_cores * 2
 loop_i     <- ceiling(N / at_a_time)
 
@@ -174,7 +173,8 @@ for (i in 1:loop_i){
       id_col   = "hhidpn",
       n_cores = n_cores,
       parallel = "mclapply",
-      return_replicates = TRUE
+      return_replicates = TRUE,
+      boot_rset = boot_slice
     )
 
   addi  <- fromi - 1
@@ -183,10 +183,12 @@ for (i in 1:loop_i){
   write_csv(booty$replicates, file = file.path("Data/model3/unadj_haz_replicates/", namei))
   rm(booty); gc()
 }
-booty <- vroom::vroom("Data/model3/unadj_haz_replicates/")
-write_csv("Data/model3/unadj_haz_replicates.csv.gz")
+files <- file.path("Data/model3/unadj_haz_replicates",dir("Data/model3/unadj_haz_replicates"))
+booty <- vroom::vroom(files)
+write_csv(booty,file="Data/model3/unadj_haz_replicates.csv.gz")
 unlink("Data/model3/unadj_haz_replicates", recursive = TRUE)
 rm(booty); gc()
+
 
 # ------------------------------------
 # Explore results
