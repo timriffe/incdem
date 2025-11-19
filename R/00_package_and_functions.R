@@ -15,10 +15,10 @@ library(expm)
 library(msm)
 library(zoo)
 library(rsample)
-# these 4 can be commented out !!!!!!
-library(multidplyr)
 library(future)
 library(furrr)
+library(janitor)
+library(HMDHFDplus)
 
 # impute age using some simple logic
 impute_age <- function(age, wave){
