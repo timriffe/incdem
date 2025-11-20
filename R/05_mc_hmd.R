@@ -2,6 +2,8 @@ source("R/00_package_and_functions.R")
 library(HMDHFDplus)
 library(janitor)
 
+set.seed(2025)
+
 Deaths <- readHMDweb("USA","Deaths_1x1", 
                  username = Sys.getenv("us"), 
                  password = Sys.getenv("pw")) |> 

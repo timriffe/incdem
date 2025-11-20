@@ -19,6 +19,9 @@ library(future)
 library(furrr)
 library(janitor)
 library(HMDHFDplus)
+library(data.table)
+library(vroom)
+library(purrr)
 
 # impute age using some simple logic
 impute_age <- function(age, wave){
