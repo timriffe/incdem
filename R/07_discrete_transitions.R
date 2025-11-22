@@ -34,8 +34,13 @@ probs1m <-
 write_csv(probs1m, file = "Data/model1/probs_m.csv.gz")
 rm(probs1m);gc()
 
+probs <- vroom(c("Data/model1/probs_m.csv.gz","Data/model1/probs_f.csv.gz"))
+write_csv(probs, "Data/model1/probs.csv.gz")
+rm(probs);gc()
+unlink("Data/model1/probs_m.csv.gz");unlink("Data/model1/probs_f.csv.gz")
+# ----------------------------------------------
 # model 2, loop over years and sex:
-
+# ----------------------------------------------
 haz <- read_csv("Data/model2/adj_haz_replicates.csv.gz")
 object.size(haz) |> print(units="Mb")
 
@@ -65,8 +70,9 @@ write_csv(probs,file = "Data/model2/probs.csv.gz")
 rm(probs);gc()
 unlink("Data/model2/tmp", recursive=TRUE)
 
-
+# ----------------------------------------------
 # model 3, loop over years and sex:
+# ----------------------------------------------
 
 haz <- read_csv("Data/model3/adj_haz_replicates.csv.gz")
 object.size(haz) |> print(units="Mb")
