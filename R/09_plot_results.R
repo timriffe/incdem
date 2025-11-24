@@ -1,91 +1,58 @@
 # previous step
-# source("R/01_data_preparation.R")
-# source("R/02_estimate_models.R")
-# source("R/03_predict_from_models.R")
-# OR load prepared data
-result_df <- read_csv("Data/results.csv.gz")
+source("R/00_package_and_functions.R")
+
+# ----------------------- #
+# model 1                 #
+# ----------------------- #
+probs <- read_csv("Data/model1/probs.csv.gz")
 # ------------------------------------------------------------------- #
-# plot rates
-result_df |>
-  mutate(to = to |> as.character() |> parse_number(),
-         from = from |> as.character()|> parse_number()) |> 
-  filter(to>from) |> 
-  mutate(Period = as.factor(int_date_decimal),
-         transition = paste0("haz",from,to)) |>
-  ggplot(aes(x        = age, 
-             y        = rate, 
-             color    = transition, 
-             linetype = Period)) +
-  geom_line(linewidth = 1) +
-  labs(
-    title    = "Estimated Transition Hazards by Age",
-    subtitle = "*Linear time trend",
-    x        = "Age",
-    y        = "Hazard Rate",
-    color    = "Transition"
-  ) +
-  theme_minimal() +
-  scale_y_log10() +
-  facet_wrap(~sex) + 
-  theme(legend.position = "bottom")
+
+probs |> 
+  filter(to > from) |> 
+  group_by(period5, female, age, from, to) |> 
+  summarize(p_med = median(p),
+            lower = quantile(p, 0.025),
+            upper = quantile(p, 0.975)) |> 
+  ggplot(aes(x = age, y = p_med, color = interaction(from, to))) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = interaction(from, to)), color = "transparent", alpha = .3) +
+  facet_wrap(female~period5) +
+  scale_y_log10()
+
+# ----------------------- #
+# model 2                 #
+# ----------------------- #
+probs <- read_csv("Data/model2/probs.csv.gz")
 # ------------------------------------------------------------------- #
-# plot probability
-result_df |>
-  mutate(Period = as.factor(int_date_decimal)) |> 
-  ggplot(aes(x        = age, 
-             y        = prob, 
-             color    = to, 
-             linetype = Period)) +
-  geom_line(linewidth = 1) +
-  labs(
-    title    = "Estimated Transition Hazards by Age",
-    subtitle = "*Linear time trend",
-    x        = "Age",
-    y        = "Hazard Rate",
-    color   = "Transition"
-  ) +
-  theme_minimal() +
-  scale_y_log10() +
-  facet_wrap(sex ~ from) + 
-  theme(legend.position = "bottom")
+probs |> 
+  filter(to > from) |> 
+  group_by(female, year, age, from, to) |> 
+  summarize(p_med = median(p),
+            lower = quantile(p, 0.025),
+            upper = quantile(p, 0.975)) |> 
+  ggplot(aes(x = age, y = p_med, color = interaction(from, to))) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = interaction(from, to)), color = "transparent", alpha = .3) +
+  facet_wrap(year~female) +
+  scale_y_log10()
+
+rm(probs);gc()
+
+# ----------------------- #
+# model 3                 #
+# ----------------------- #
+probs <- read_csv("Data/model3/probs.csv.gz")
 # ------------------------------------------------------------------- #
-# hazard rate
-result_df |>
-  mutate(
-    from = from |> as.character() |> parse_number(),
-    to   =  to  |> as.character() |> parse_number(),
-    transition = paste(from, "→", to)
-  ) |>
-  filter(to   == 2,
-         from == 1) |>
-  ggplot(aes(
-    x        = age,
-    y        = rate,
-    color    = as.factor(int_date_decimal),
-    linetype = sex
-  )) +
-  geom_line(linewidth = 1) +
-  labs(
-    title    = "Estimated Transition Hazards by Age",
-    subtitle = "*Linear time trend",
-    x        = "Age",
-    y        = "Hazard Rate",
-    color    = "Transition"
-  ) +
-  theme_minimal() +
-  scale_y_log10() + 
-  theme(legend.position = "bottom")
-# ------------------------------------------------------------------- #
-# check support; this was used to determine which age range
-# to fit over. Reason: spline tail misbehaves in young ages
-# if all ages are considered.
-hrs_msm |>
-  filter(state_clean == 2) |>
-  count(age_int = floor(age)) |>
-  ggplot(aes(x = age_int, 
-             y = n)) +
-  geom_col() +
-  labs(title = "Number of Observations in Dementia by Age",
-       x     = "Age", 
-       y     = "Count")
-# ------------------------------------------------------------------- #
+probs |> 
+  filter(to > from) |> 
+  group_by(female, year, age, from, to) |> 
+  summarize(p_med = median(p),
+            lower = quantile(p, 0.025),
+            upper = quantile(p, 0.975)) |> 
+  ggplot(aes(x = age, y = p_med, color = interaction(from, to))) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = interaction(from, to)), color = "transparent", alpha = .3) +
+  facet_wrap(year~female) +
+  scale_y_log10()
+
+rm(probs);gc()
