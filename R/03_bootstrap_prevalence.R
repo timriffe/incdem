@@ -7,9 +7,10 @@
 # --------------------
 
 
-source("R/00_package_and_functions.R")
-source("R/01_prepare_hrs.R")
-source("R/00_package_and_functions.R")
+source("R/00_dependencies.R")
+source("R/01_functions.R")
+source("R/02_prepare_hrs.R")
+source("R/01_functions.R")
 hrs_to_fit_prepped <- 
   hrs_to_fit |>
   mutate(period5 = case_when(between(obs_date, 2004, 2010) ~ "period 1",

@@ -1329,26 +1329,43 @@ hazards_to_discrete <- function(hazards,
   build_P_one_group <- function(grp_df) {
     Q <- matrix(0, n_states, n_states)
     
-    f <- idx[as.character(grp_df[[from_col]])]
-    t <- idx[as.character(grp_df[[to_col]])]
+    f_all <- idx[as.character(grp_df[[from_col]])]
+    t_all <- idx[as.character(grp_df[[to_col]])]
+    h_all <- grp_df[[haz_col]]
     
-    # Fill off-diagonals with hazards
-    Q[cbind(f, t)] <- grp_df[[haz_col]]
+    is_diag <- (f_all == t_all)
     
-    # Diagonals = -row sum of off-diagonals
-    diag(Q) <- -rowSums(Q)
+    # 1) Fill off-diagonals from input
+    if (any(!is_diag)) {
+      f_off <- f_all[!is_diag]
+      t_off <- t_all[!is_diag]
+      h_off <- h_all[!is_diag]
+      Q[cbind(f_off, t_off)] <- h_off
+    }
     
-    # Matrix exponential for interval length age_interval
+    # 2) If diagonals are provided in the data, use them as-is
+    if (any(is_diag)) {
+      f_diag <- f_all[is_diag]
+      h_diag <- h_all[is_diag]
+      Q[cbind(f_diag, f_diag)] <- h_diag
+    }
+    
+    # 3) For rows with no diagonal provided, set diag = -sum(off-diagonals)
+    row_sums_off <- rowSums(Q) - diag(Q)  # only off-diagonals
+    for (i in seq_len(n_states)) {
+      if (Q[i, i] == 0 && row_sums_off[i] != 0) {
+        Q[i, i] <- -row_sums_off[i]
+      }
+    }
+    
+    # Now Q should be a valid generator (row sums ~ 0)
     P <- expm::expm(Q * age_interval)
     
-    # IMPORTANT FIX:
-    # as.vector(P) is column-major -> row index changes fastest
-    # so:
-    #   from = row index (rep(..., times = n_states))
-    #   to   = col index (rep(..., each  = n_states))
+    # as.vector(P) is column-major: P[1,1],P[2,1],...,P[n,1],P[1,2],...
+    # -> row index (from) changes fastest, col index (to) slowest
     tibble::tibble(
-      from = rep(state_space, times = n_states),
-      to   = rep(state_space, each  = n_states),
+      from = rep(state_space, times = n_states),  # row index
+      to   = rep(state_space, each  = n_states),  # col index
       p    = as.vector(P)
     )
   }

@@ -1,6 +1,6 @@
 # Load required packages
-source("R/00_package_and_functions.R")
-
+source("R/00_dependencies.R")
+source("R/01_functions.R")
 # Select necessary variables from main dataset
 max_wave <- 16
 hrs_file <- if_else(max_wave == 16, 
