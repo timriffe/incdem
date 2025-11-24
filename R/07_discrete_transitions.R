@@ -4,7 +4,9 @@ source("R/01_functions.R")
 
 
 
-
+# ----------------------------------------------
+# model 1, 
+# ----------------------------------------------
 haz <- read_csv("Data/model1/adj_haz_replicates.csv.gz") |> 
   mutate(from = substr(transition,2,2) |> as.integer(),
          to = substr(transition,3,3) |> as.integer()) |> 
