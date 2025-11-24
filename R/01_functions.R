@@ -1,28 +1,3 @@
-
-# whenever we add packages, after installing locally, run renv::snapshot()
-# renv::snapshot(force=TRUE)
-
-
-# renv::restore()
-# ------------------------------------------------------------------- #
-library(doParallel)
-library(tidyverse)
-library(parallel)
-library(splines)
-library(slider)
-library(haven)
-library(expm)
-library(msm)
-library(zoo)
-library(rsample)
-library(future)
-library(furrr)
-library(janitor)
-library(HMDHFDplus)
-library(data.table)
-library(vroom)
-library(purrr)
-
 # impute age using some simple logic
 impute_age <- function(age, wave){
   if (all(is.na(age))){
@@ -795,49 +770,49 @@ fit_msm_boot <- function(
   
   master_grid <- coerce_join_cols(master_grid)
   
-
   
-    fit_msm_on_split <- function(split, rep_idx) {
-      tryCatch(
-        {
-          dat_b <- rsample::analysis(split) %>%
-            clone_ids_in_boot_sample(id_col = id_col, time_var = "age")
-          
-          haz_b <- fit_msm(
-            data          = dat_b,
-            strat_vars    = strat_vars,
-            covariate_var = covariate_var,
-            age_from_to   = age_from_to,
-            age_int       = age_int,
-            spline_df     = spline_df,
-            spline_type   = spline_type,
-            Q             = Q
-          )
-          
-          if (!nrow(haz_b)) {
-            out <- master_grid
-            out$haz <- NA_real_
-          } else {
-            haz_b2 <- haz_b %>%
-              dplyr::mutate(
-                dplyr::across(dplyr::all_of(strat_vars), as.character),
-                dplyr::across(dplyr::all_of(covariate_var), as.character),
-            age  = round(as.numeric(.data$age), 6),
-            from = as.integer(.data$from),
-            to   = as.integer(.data$to)
-            )
-      
-      out <- master_grid %>%
-        dplyr::left_join(
-          haz_b2,
-          by     = join_keys,
-          suffix = c("", ".rep")
+  
+  fit_msm_on_split <- function(split, rep_idx) {
+    tryCatch(
+      {
+        dat_b <- rsample::analysis(split) %>%
+          clone_ids_in_boot_sample(id_col = id_col, time_var = "age")
+        
+        haz_b <- fit_msm(
+          data          = dat_b,
+          strat_vars    = strat_vars,
+          covariate_var = covariate_var,
+          age_from_to   = age_from_to,
+          age_int       = age_int,
+          spline_df     = spline_df,
+          spline_type   = spline_type,
+          Q             = Q
         )
-        }
+        
+        if (!nrow(haz_b)) {
+          out <- master_grid
+          out$haz <- NA_real_
+        } else {
+          haz_b2 <- haz_b %>%
+            dplyr::mutate(
+              dplyr::across(dplyr::all_of(strat_vars), as.character),
+              dplyr::across(dplyr::all_of(covariate_var), as.character),
+              age  = round(as.numeric(.data$age), 6),
+              from = as.integer(.data$from),
+              to   = as.integer(.data$to)
+            )
           
-          out$replicate <- rep_idx
-          out
-          },
+          out <- master_grid %>%
+            dplyr::left_join(
+              haz_b2,
+              by     = join_keys,
+              suffix = c("", ".rep")
+            )
+        }
+        
+        out$replicate <- rep_idx
+        out
+      },
       error = function(e) {
         # This is where your "numerical overflow" lands
         message(
@@ -850,9 +825,9 @@ fit_msm_boot <- function(
         out$replicate <- rep_idx
         out
       }
-      )
+    )
   }
-    
+  
   
   # ---- 1) Stratified, group bootstrap replicates (weighted if provided) ----
   # Use provided boot_rset if given; otherwise build it here.
@@ -1009,7 +984,7 @@ fit_prev <- function(
     exclude_state   = 3L
 ) {
   # --- 0) sanity / NA handling ---------------------------------------------
-
+  
   # drop rows with NAs
   drop_vars <- unique(c(strat_vars, covariate_var, "age", state_var, id_col, weight_col))
   if (length(drop_vars)>0) {
@@ -1473,10 +1448,3 @@ hazards_to_discrete <- function(hazards,
   
   dplyr::ungroup(out)
 }
-
-
-
-
-
-
-
