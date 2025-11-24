@@ -1357,15 +1357,23 @@ hazards_to_discrete <- function(hazards,
     f <- idx[as.character(grp_df[[from_col]])]
     t <- idx[as.character(grp_df[[to_col]])]
     
+    # Fill off-diagonals with hazards
     Q[cbind(f, t)] <- grp_df[[haz_col]]
     
+    # Diagonals = -row sum of off-diagonals
     diag(Q) <- -rowSums(Q)
     
+    # Matrix exponential for interval length age_interval
     P <- expm::expm(Q * age_interval)
     
+    # IMPORTANT FIX:
+    # as.vector(P) is column-major -> row index changes fastest
+    # so:
+    #   from = row index (rep(..., times = n_states))
+    #   to   = col index (rep(..., each  = n_states))
     tibble::tibble(
-      from = rep(state_space, each = n_states),
-      to   = rep(state_space, times = n_states),
+      from = rep(state_space, times = n_states),
+      to   = rep(state_space, each  = n_states),
       p    = as.vector(P)
     )
   }
@@ -1424,19 +1432,16 @@ hazards_to_discrete <- function(hazards,
     )
   }
   
-  # ---- CHUNKED mclapply: one chunk per core ----
+  # Chunked mclapply: one chunk of group indices per core
   eval_mclapply <- function() {
     cores <- max(1L, n_cores)
     cores <- min(cores, n_groups)  # don't create more cores than groups
     
-    # split group indices into ~equal chunks
-    all_idx <- seq_len(n_groups)
-    # This divides into 'cores' chunks with roughly equal length
+    all_idx  <- seq_len(n_groups)
     chunk_id <- ceiling(seq_along(all_idx) * cores / n_groups)
     idx_chunks <- split(all_idx, chunk_id)
     
     chunk_worker <- function(idx_vec) {
-      # idx_vec is a vector of group indices for this core
       res_list <- vector("list", length(idx_vec))
       for (k in seq_along(idx_vec)) {
         i <- idx_vec[k]
