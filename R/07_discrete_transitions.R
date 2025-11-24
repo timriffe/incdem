@@ -46,7 +46,7 @@ unlink("Data/model1/probs_m.csv.gz");unlink("Data/model1/probs_f.csv.gz")
 # ----------------------------------------------
 haz <- read_csv("Data/model2/adj_haz_replicates.csv.gz")
 object.size(haz) |> print(units="Mb")
-
+dir.create("Data/model2/tmp")
 yrs <- haz$year |> unique() |> sort()
 sxs <- c(0,1)
 for (y in yrs){
