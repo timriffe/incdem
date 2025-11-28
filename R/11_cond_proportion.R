@@ -212,3 +212,21 @@ calc_exs(probs = probs,
 rm(probs);gc()
 
 # end
+
+do_this <- FALSE
+if (do_this){
+prop <- read_csv("Data/model3/prop50.csv.gz")
+
+prop |> 
+  mutate(gender = if_else(female == 0,"men","women")) |> 
+  ggplot(aes(x = year, y = prop50)) +
+  geom_line(aes(color = gender)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = gender), color = "transparent", alpha = .3) +
+  scale_fill_manual(values = c(men = "#2a915a", women = "#682a91")) +
+  scale_color_manual(values = c(men = "#2a915a", women = "#682a91")) +
+  labs(y = "proportion dementia-free (DFLE / LE)",
+       title = "Proportion of remaining life expectancy dementia free",
+       subtitle = "conditional on dementia-free survival to age 50",
+       caption = "Data: HRS with HMD adjustment\nModel 3: gender strata, age spline, time linear") +
+  theme_minimal()
+}
