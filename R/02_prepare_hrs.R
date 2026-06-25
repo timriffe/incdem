@@ -149,7 +149,8 @@ hrs_joined <- hrs_long |>
          diabetes      = diabe_status,
          heart_disease = hearte_status,
          stroke        = stroke_status) |> 
-  mutate(age = age_imputed) |> 
+  # TR: new 25-6-2026
+  mutate(age = if_else(is.na(age),age_imputed,age)) |> 
   select(-age_imputed) |> 
   arrange(hhidpn, age) |> 
   group_by(hhidpn) |> 
