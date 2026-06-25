@@ -32,7 +32,7 @@ boot_design <- group_bootstraps2(
 unlink("Data/model1/unadj_haz_replicates", recursive = TRUE)
 dir.create("Data/model1/unadj_haz_replicates")
 
-n_cores    <- 6
+n_cores    <- 8
 at_a_time  <- n_cores * 3
 N          <- length(boot_design$splits)
 loop_i     <- ceiling(N / at_a_time)
@@ -91,7 +91,7 @@ unlink("Data/model2/unadj_haz_replicates", recursive = TRUE)
 dir.create("Data/model2/unadj_haz_replicates")
 
 N          <- length(boot_design$splits)
-n_cores    <- 6
+n_cores    <- 8
 at_a_time  <- n_cores * 3
 loop_i     <- ceiling(N / at_a_time)
 
@@ -145,7 +145,7 @@ unlink("Data/model3/unadj_haz_replicates", recursive = TRUE)
 dir.create("Data/model3/unadj_haz_replicates")
 
 N          <- length(boot_design$splits)
-n_cores    <- 7
+n_cores    <- 8
 at_a_time  <- n_cores * 2
 loop_i     <- ceiling(N / at_a_time)
 
