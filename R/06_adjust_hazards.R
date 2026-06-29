@@ -162,7 +162,7 @@ rm(h12, h13, h23); gc()
 haz_params[prev,         prevalence := i.prevalence]
 haz_params[external_mort, mx        := i.mx]
 
-# Now do your adjustment
+# Now do adjustment
 haz_params[, Rx   := h2_3 / h1_3]
 haz_params[, h1_3 := mx / (1 - prevalence + prevalence * Rx)]
 haz_params[, h2_3 := h1_3 * Rx]
@@ -227,7 +227,7 @@ rm(h12, h13, h23); gc()
 haz_params[prev,         prevalence := i.prevalence]
 haz_params[external_mort, mx        := i.mx]
 
-# Now do your adjustment
+# Now do adjustment
 haz_params[, Rx   := h2_3 / h1_3]
 haz_params[, h1_3 := mx / (1 - prevalence + prevalence * Rx)]
 haz_params[, h2_3 := h1_3 * Rx]
@@ -247,3 +247,5 @@ haz_adj_model3 <- rbindlist(list(
 rm(haz_params);rm(prev);gc()
 write_csv(haz_adj_model3,file = "Data/model3/adj_haz_replicates.csv.gz")
 rm(haz_adj_model3);gc()
+
+# end

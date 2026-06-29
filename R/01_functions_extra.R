@@ -513,7 +513,80 @@ calc_exs <- function(probs,
     )
 }
 
-
+calc_lxs <- function(probs,
+                     from_age      = 50,
+                     age_interval  = 0.25,
+                     init          = c(`1` = 1, `2` = 0),
+                     init_method   = c("init",
+                                       "constant_stationary",
+                                       "rev_stationary"),
+                     from_col      = "from",
+                     to_col        = "to",
+                     age_col       = "age",
+                     p_col         = "p",
+                     group_cols    = c("replicate", "female", "period5"),
+                     trans_col     = "transition") {
+  
+  init_method <- match.arg(init_method)
+  
+  # standardise cols
+  from_sym   <- rlang::sym(from_col)
+  to_sym     <- rlang::sym(to_col)
+  age_sym    <- rlang::sym(age_col)
+  p_sym      <- rlang::sym(p_col)
+  group_syms <- rlang::syms(group_cols)
+  trans_sym  <- rlang::sym(trans_col)
+  
+  probs_std <- probs |>
+    dplyr::rename(
+      from = !!from_sym,
+      to   = !!to_sym,
+      age  = !!age_sym,
+      p    = !!p_sym
+    )
+  
+  probs_std |>
+    dplyr::filter(age >= from_age) |>
+    dplyr::group_by(!!!group_syms) |>
+    dplyr::group_modify(
+      ~ {
+        # .x contains: from, to, age, p
+        # .y contains grouping variables, e.g. replicate, female, period5/year
+        
+        grp_full <- dplyr::bind_cols(.y, .x)
+        
+        # 1. initial distribution
+        init_vec <- get_init_vec_from_probs(
+          probs_grp    = grp_full,
+          from_age     = from_age,
+          age_interval = age_interval,
+          init         = init,
+          init_method  = init_method,
+          trans_col    = trans_col
+        )
+        
+        # 2. off-diagonal transitions for calc_occupancies()
+        p_list <- grp_full |>
+          dplyr::filter(to > from) |>
+          dplyr::mutate(!!trans_sym := paste0(from, "-", to)) |>
+          dplyr::select(!!!group_syms, age, p, !!trans_sym)
+        
+        # 3. return age-specific occupancies, not summed expectancies
+        mscalc::calc_occupancies(
+          transitions  = p_list,
+          init         = init_vec,
+          delim        = "-",
+          age_interval = age_interval,
+          trans_col    = trans_col
+        )
+      }
+    ) |>
+    dplyr::rename(
+      Lx1 = `1`,
+      Lx2 = `2`
+    ) |>
+    dplyr::ungroup()
+}
 
 
 

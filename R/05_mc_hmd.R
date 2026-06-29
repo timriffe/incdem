@@ -117,4 +117,19 @@ rm(external_ref_mc);rm(external_ref_quarter);gc()
 #   scale_y_log10() +
 #   geom_ribbon(aes(ymin=lower,ymax=upper,fill = female),alpha=.3,color="transparent") 
 
-
+mx_to_e0_fast <- function(mx,age_int = .25){
+  lx <- c(1,exp(-cumsum(mx)))
+  Lx <- c(lx[-1], lx[-length(lx)]) * age_int
+  sum(Lx)
+}
+mx <- read_csv(file = "Data/external_ref_mc.csv.gz")
+e50_bands <-
+  mx |> 
+  group_by(replicate, female, year) |> 
+  summarize(e50 = mx_to_e0_fast(mx,.25)) |> 
+  ungroup() |> 
+  group_by(female, year) |> 
+  summarize(high = quantile(e50, .975),
+            low = quantile(e50, .025))
+e50_bands |> 
+  mutate(high - low)

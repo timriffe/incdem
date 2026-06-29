@@ -27,12 +27,12 @@ boot_design <- group_bootstraps2(
 )
 
 # ----------------------------------------------------
-# (1) age linear, 5-year period as strata (~2.5 hrs on TR's laptop using 6 cores)
+# (1) age linear, 5-year period as strata (~2.5 hrs on TR's old laptop using 6 cores)
 # ----------------------------------------------------
 unlink("Data/model1/unadj_haz_replicates", recursive = TRUE)
 dir.create("Data/model1/unadj_haz_replicates")
 
-n_cores    <- 6
+n_cores    <- 8
 at_a_time  <- n_cores * 3
 N          <- length(boot_design$splits)
 loop_i     <- ceiling(N / at_a_time)
@@ -85,13 +85,13 @@ write_csv(booty, file = "Data/model1/unadj_haz_replicates.csv.gz")
 unlink("Data/model1/unadj_haz_replicates", recursive = TRUE)
 rm(booty); gc()
 # ----------------------------------------------------
-# (2) age linear, year linear (3+ hrs on 6 core's TR's laptop)
+# (2) age linear, year linear (3+ hrs on 6 core's TR's old laptop)
 # ----------------------------------------------------
 unlink("Data/model2/unadj_haz_replicates", recursive = TRUE)
 dir.create("Data/model2/unadj_haz_replicates")
 
 N          <- length(boot_design$splits)
-n_cores    <- 6
+n_cores    <- 8
 at_a_time  <- n_cores * 3
 loop_i     <- ceiling(N / at_a_time)
 
@@ -138,7 +138,7 @@ unlink("Data/model2/unadj_haz_replicates", recursive = TRUE)
 rm(booty); gc()
 
 # ----------------------------------------------------
-# (3) age spline df2, year linear (est 14-15 hrs on 7 cores TR's laptop)
+# (3) age spline df2, year linear (est 14-15 hrs on 7 cores TR's old laptop)
 # ----------------------------------------------------
 
 unlink("Data/model3/unadj_haz_replicates", recursive = TRUE)

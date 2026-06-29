@@ -45,7 +45,7 @@ calc_exs(probs = probs,
             lower = quantile(expectancy,0.025),
             upper = quantile(expectancy,0.975), .groups = "drop") |> 
   write_csv(file = "Data/model1/e65.csv.gz")
-# expectancies, age 65
+# expectancies, age 85
 calc_exs(probs = probs,
          from_age = 85, 
          age_interval = 0.25, 
@@ -66,7 +66,7 @@ calc_exs(probs = probs,
   write_csv(file = "Data/model1/e85.csv.gz")
 
 rm(probs);gc()
-
+ls()
 # ------------- #
 # model 2       #
 # ------------- #

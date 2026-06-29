@@ -1,5 +1,6 @@
 # previous step
-source("R/00_package_and_functions.R")
+source("R/00_dependencies.R")
+source("R/01_functions.R")
 
 # ----------------------- #
 # model 1                 #

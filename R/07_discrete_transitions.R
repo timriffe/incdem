@@ -7,10 +7,7 @@ source("R/01_functions.R")
 # ----------------------------------------------
 # model 1, 
 # ----------------------------------------------
-haz <- read_csv("Data/model1/adj_haz_replicates.csv.gz") |> 
-  mutate(from = substr(transition,2,2) |> as.integer(),
-         to = substr(transition,3,3) |> as.integer()) |> 
-  select(-transition)
+haz <- read_csv("Data/model1/adj_haz_replicates.csv.gz")
 object.size(haz) |> print(units="Mb")
 
 probs1f <- 
@@ -19,7 +16,7 @@ probs1f <-
   hazards_to_discrete(
     age_interval = 0.25,
     id_cols      = c("age", "replicate", "female", "period5"),
-    n_cores      = 7,
+    n_cores      = 5,
     parallel     = "mclapply")
 
 write_csv(probs1f, file = "Data/model1/probs_f.csv.gz")
