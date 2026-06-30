@@ -33,7 +33,7 @@ prev |>
            female = factor(
              female,
              levels = c(0, 1),
-             labels = c("Male", "Female"))) %>% 
+             labels = c("Men", "Women"))) %>% 
   ggplot(aes(x = age, y = prev_median, color = year)) +
   geom_line(linewidth = 0.9) +
   geom_ribbon(mapping = aes(ymin = lower, 
@@ -84,7 +84,7 @@ prev |>
     legend.box = "horizontal"
   )
 
-ggsave(filename = "figures_paper/fig1_prevalence.jpeg", scale = 1)
+ggsave(filename = "figures_paper/fig1_prevalence.png", width = 15, height = 10, units = "cm")
 
 
 
@@ -111,7 +111,7 @@ fig2 |>
     female = factor(
       female,
       levels = c(0, 1),
-      labels = c("Male", "Female")
+      labels = c("Men", "Women")
     ),
     year = factor(year),
     Transtion = case_when(
@@ -203,7 +203,7 @@ fig2 |>
       color = "black"
     ))
 
-ggsave(filename = "figures_paper/fig2_hazards.jpeg", scale = 1.2)
+ggsave(filename = "figures_paper/fig2_hazards.png",width = 20, height = 15, units = "cm")
 # ------------------------------------------------------------------- #
 # probs2 <- read_csv("Data/model2/probs.csv.gz")
 # 
@@ -288,8 +288,8 @@ ex2 |>
   labs(
     x = "Year",
     y = "Life expectancy at age 50",
-    color = "Sex",
-    fill = "Sex"
+    color = "Gender",
+    fill = "Gender"
   ) +
   guides(
     color = guide_legend(
@@ -313,7 +313,7 @@ ex2 |>
     legend.title = element_text(face = "bold", color = "black"),
     panel.spacing = unit(1.2, "lines"))
 
-ggsave(filename = "figures_paper/fig3_e50.jpeg", scale = 1)
+ggsave(filename = "figures_paper/fig3_e50.png", width = 15, height = 10, units = "cm")
 
 # ------------------------------------------------------------------- #
 prop <- read_csv("Data/model2/prop50.csv.gz")
@@ -379,8 +379,8 @@ prop |>
   labs(
     x = "Year",
     y = "Proportion of remaining life spent with dementia at age 50",
-    color = "Sex",
-    fill = "Sex"
+    color = "Gender",
+    fill = "Gender"
   ) +
   guides(
     color = guide_legend(
@@ -405,4 +405,4 @@ prop |>
     panel.spacing = unit(1.2, "lines")
   )
 
-ggsave(filename = "figures_paper/fig4_prop.jpeg", scale = 1)
+ggsave(filename = "figures_paper/fig4_prop.png", width = 15, height = 10, units = "cm")
