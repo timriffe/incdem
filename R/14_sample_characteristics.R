@@ -91,11 +91,13 @@ z <- hrs_long %>%
 # % of ages missing in original sample that were imputed by impute_age
 (z$age %>% is.na() %>% sum()) / length(z$age)
 
+
+# ------------------------------------------------------------------- #
+# Here I calculate sample characteristics
 rm(list = ls())
 source("R/00_dependencies.R")
 source("R/01_functions.R")
 source("R/02_prepare_hrs.R")
-names(hrs_to_fit)
 # sample characteristics
 # number of unique persons
 hrs_to_fit_prepped <- hrs_to_fit |>
@@ -114,20 +116,19 @@ hrs_to_fit_prepped <- hrs_to_fit |>
          state_msm != 3) |> 
   mutate(period = as.factor(period5))
 
-
-
+# number of people in sample 
 hrs_to_fit_prepped %>% 
   pull(hhidpn) %>% 
   unique() %>%
   length()
+
 # sex distribution
 hrs_to_fit_prepped %>% 
   select(hhidpn, female) %>%
   distinct() %>% 
   janitor::tabyl(female)
 
-
-# mean sd age at baseelne (first apearance)
+# mean sd age at baseline (first appearance)
 hrs_to_fit_prepped %>% 
   select(hhidpn, female, age) %>%
   filter(age == min(age), .by = "hhidpn") %>%
@@ -140,19 +141,6 @@ hrs_to_fit_prepped %>%
   filter(age == min(age), .by = "hhidpn") %>%
   summarise(m_age = mean(age),
             s_age = sd(age), .by = "female")
-
-# exposures  average time spent by indiv. in study
-hrs_to_fit_prepped %>% 
-  select(hhidpn, age) %>%
-  group_by(hhidpn) %>%
-  mutate(n = row_number(),
-         n = max(n)) %>% 
-  filter(n > 1) %>% 
-  ungroup() %>% 
-  filter(age %in% c(min(age), max(age)), .by = "hhidpn") %>% 
-  mutate(df = diff(age), .by = "hhidpn") %>%
-  select(hhidpn, df) %>%
-  count(df)
 
 # distribution of individual follow-up duration (years) Exposure?
 exposure <- hrs_to_fit_prepped %>% 
@@ -167,22 +155,6 @@ exposure <- hrs_to_fit_prepped %>%
 mean(exposure$df)
 sd(exposure$df)
 
-
-ggplot(
-  exposure,
-  aes(x = df)
-) +
-  geom_density(
-    fill = "grey70",
-    alpha = 0.5,
-    linewidth = 1
-  ) +
-  labs(
-    x = "Years between first and last observation",
-    y = "Density"
-  ) +
-  theme_bw(base_size = 12)
-
 # wave spacing
 wave_spacing <- hrs_to_fit_prepped %>% 
   select(hhidpn, year) %>%
@@ -195,5 +167,4 @@ wave_spacing <- hrs_to_fit_prepped %>%
   filter(!is.na(spacing)) %>% 
   filter(spacing > 0)
 
-table(wave_spacing$spacing)
-
+janitor::tabyl(wave_spacing$spacing)
