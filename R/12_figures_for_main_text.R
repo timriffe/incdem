@@ -1,5 +1,5 @@
 # change colors to purple and green
-
+# ------------------------------------------------------------------- #
 library(tidyverse)
 library(scales)
 haz  <- read_csv("Data/model2/adj_haz_replicates.csv.gz")
@@ -86,10 +86,7 @@ prev |>
 
 ggsave(filename = "figures_paper/fig1_prevalence.png", width = 15, height = 10, units = "cm")
 
-
-
-
-
+# ------------------------------------------------------------------- #
 fig2 <- haz %>% 
   filter(to > from) |> # create c from and to columns
   summarize(p_med = median(haz),
@@ -203,7 +200,10 @@ fig2 |>
       color = "black"
     ))
 
-ggsave(filename = "figures_paper/fig2_hazards.png",width = 20, height = 15, units = "cm")
+# ggsave(filename = "figures_paper/fig2_hazards.png",width = 20, height = 15, units = "cm")
+
+ggsave(filename = "figures_annex/hazards.pdf", width = 20, height = 15, units = "cm")
+
 # ------------------------------------------------------------------- #
 # probs2 <- read_csv("Data/model2/probs.csv.gz")
 # 
@@ -227,11 +227,6 @@ ggsave(filename = "figures_paper/fig2_hazards.png",width = 20, height = 15, unit
 # LE with and without dimentia
 
 ex2 <- read_csv("Data/model2/e50.csv.gz")
-
-
-ex2 %>% 
-  filter(year %in% c(2004, 2019))
-
 
 ex2 |>
   mutate(
@@ -315,6 +310,26 @@ ex2 |>
 
 ggsave(filename = "figures_paper/fig3_e50.png", width = 15, height = 10, units = "cm")
 
+# table
+ex2 |>
+  mutate(
+    state = ifelse(
+      state == "DFLE",
+      "Dementia free",
+      "With dementia"
+    ),
+    female = factor(
+      female,
+      levels = c(0, 1),
+      labels = c("Men", "Women")
+    ),
+    State = factor(
+      state,
+      levels = c("Dementia free", "With dementia")
+    )
+  ) %>% 
+  filter(year %in% c(2004, 2019)) %>% 
+  select(-state)
 # ------------------------------------------------------------------- #
 prop <- read_csv("Data/model2/prop50.csv.gz")
 

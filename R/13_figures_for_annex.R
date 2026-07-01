@@ -1,5 +1,5 @@
 library(tidyverse)
-library(grid) # для стрелок
+library(grid) # arrows
 library(DiagrammeR)
 library(ggplot2)
 
@@ -97,7 +97,7 @@ ggsave(
 # ------------------------------------------------------------------------ #
 # ADJ and UNADJ trans hazards
 haz_unadj <- read_csv("Data/model2/unadj_haz_replicates.csv.gz", show_col_types = FALSE) %>% 
-  filter(year == 2019) %>% 
+  filter(year %in% c(2004, 2019)) %>% 
   filter(to > from) |> # create c from and to columns
   summarize(p_med = median(haz),
             lower = quantile(haz, 0.025),
@@ -114,7 +114,7 @@ haz_unadj <- read_csv("Data/model2/unadj_haz_replicates.csv.gz", show_col_types 
 
 
 haz <- read_csv("Data/model2/adj_haz_replicates.csv.gz", show_col_types = FALSE) %>%
-  filter(year == 2019) %>%
+  filter(year %in% c(2004, 2019)) %>% 
   filter(to > from) |> # create c from and to columns
   summarize(p_med = median(haz),
             lower = quantile(haz, 0.025),
@@ -129,18 +129,18 @@ haz <- read_csv("Data/model2/adj_haz_replicates.csv.gz", show_col_types = FALSE)
   unite(Transtion, c("from", "to"), sep = "-") %>% 
   mutate(Hazards = "Adjusted")
 
-# before and after adjustment hazards
+# before and after adjustment hazards all 3
 haz %>% 
   full_join(haz_unadj) %>% 
-  select(-year) %>% 
-  mutate(female = ifelse(female == 1, "Female", "Male"),
-         female = factor(female, levels = c("Male", "Female"))) %>% 
+  mutate(female = ifelse(female == 1, "Men", "Women"),
+         female = factor(female, levels = c("Men", "Women"))) %>% 
   separate(Transtion, c("From", "To")) %>%
   mutate(across(c(From, To), ~ case_when(
     . == "U" ~ "Dementia",
     . == "H" ~ "Dementia-free",
     . == "D" ~ "Death",
   ))) %>% 
+  filter(year %in% c(2019)) %>%
   ggplot(aes(x = age, y = p_med, color = To, linetype = Hazards)) +
   geom_line(linewidth = 1) + 
   geom_ribbon(
@@ -180,35 +180,164 @@ haz %>%
   labs(
     x = "Age",
     y = "Transition hazard (log scale)",
+    color = "To",
+    fill = "To"
+  )
+
+ggsave(
+  filename = "figures_annex/hazards_1.pdf",
+  dpi = 300
+)
+
+haz %>% 
+  full_join(haz_unadj) %>% 
+  mutate(female = ifelse(female == 1, "Men", "Women"),
+         female = factor(female, levels = c("Men", "Women"))) %>% 
+  separate(Transtion, c("From", "To")) %>%
+  mutate(across(c(From, To), ~ case_when(
+    . == "U" ~ "Dementia",
+    . == "H" ~ "Dementia-free",
+    . == "D" ~ "Death",
+  ))) %>%
+  filter(To != "Dementia") %>% 
+  mutate(Year = as.factor(year)) %>% 
+  ggplot(aes(x = age, y = p_med, color = Year, linetype = Hazards)) +
+  geom_line(linewidth = 1) + 
+  geom_ribbon(
+    aes(ymin = lower, ymax = upper, fill = Year),
+    alpha = 0.12,
+    color = NA
+  ) +
+  scale_fill_brewer(
+    palette = "Dark2"
+  )+
+  scale_color_brewer(
+    palette = "Dark2"
+  ) +
+  theme_bw(base_size = 14) +
+  scale_y_log10() +
+  facet_grid(female ~ From, switch = "y") + 
+  theme(
+    strip.placement = "outside",
+    strip.background = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.spacing = unit(1.1, "lines"),
+    axis.title = element_text(size = 12, color = "black"),
+    axis.text = element_text(size = 10, color = "black"),
+    strip.text = element_text(
+      face = "bold",
+      size = 10, 
+      color = "black"
+    ),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold", color = "black"),
+    legend.box = "horizontal",
+    plot.title = element_text(
+      face = "bold",
+      size = 14, 
+      color = "black"
+    ))+
+  labs(
+    x = "Age",
+    y = "Transition hazard (log scale)",
     color = "Year",
     fill = "Year"
   )
 
 ggsave(
-  filename = "figures_annex/hazards.pdf",
+  filename = "figures_annex/hazards_years.pdf",
   dpi = 300
 )
+
 # ------------------------------------------------------------------------ #
 # adjusted transtiion probabilities if needed can improve quality
 # I think it is not needed
 probs <- read_csv("Data/model2/probs.csv.gz")
-
-probs |> 
+probs %>% 
   filter(year == 2019) %>% 
-  filter(to > from) |> 
-  group_by(female, year, age, from, to) |> 
-  summarize(p_med = median(p),
-            lower = quantile(p, 0.025),
-            upper = quantile(p, 0.975)) |> 
-  ggplot(aes(x = age, y = p_med, color = interaction(from, to))) +
-  geom_line() +
-  geom_ribbon(aes(ymin = lower, 
-                  ymax = upper, 
-                  fill = interaction(from, to)), 
-              color = "transparent", 
-              alpha = .3) +
-  facet_wrap(. ~ female) +
-  scale_y_log10()
+  filter(to > from) %>%
+  group_by(female, year, age, from, to) %>% 
+  summarize(
+    p_med = median(p),
+    lower = quantile(p, 0.025),
+    upper = quantile(p, 0.975),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    female = ifelse(female == 1, "Men", "Women"),
+    female = factor(female, levels = c("Men", "Women")),
+    From = case_when(
+      from == 1 ~ "Dementia-free",
+      from == 2 ~ "Dementia"
+    ),
+    To = case_when(
+      to == 1 ~ "Dementia-free",
+      to == 2 ~ "Dementia",
+      to == 3 ~ "Death"
+    )
+  ) %>%
+  ggplot(
+    aes(
+      x = age,
+      y = p_med,
+      color = To
+    )
+  ) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_ribbon(
+    aes(
+      ymin = lower,
+      ymax = upper,
+      fill = To
+    ),
+    alpha = 0.12,
+    color = NA
+  ) +
+  scale_fill_brewer(
+    palette = "Dark2"
+  ) +
+  scale_color_brewer(
+    palette = "Dark2"
+  ) +
+  theme_bw(base_size = 14) +
+  scale_y_log10() +
+  facet_grid(
+    female ~ From,
+    switch = "y"
+  ) +
+  theme(
+    strip.placement = "outside",
+    strip.background = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.spacing = unit(1.1, "lines"),
+    axis.title = element_text(size = 12, color = "black"),
+    axis.text = element_text(size = 10, color = "black"),
+    strip.text = element_text(
+      face = "bold",
+      size = 10,
+      color = "black"
+    ),
+    legend.position = "bottom",
+    legend.title = element_text(
+      face = "bold",
+      color = "black"
+    ),
+    legend.box = "horizontal"
+  ) +
+  labs(
+    x = "Age",
+    y = "Transition probability (log scale)",
+    color = "To",
+    fill = "To"
+  )
+
+ggsave(
+  filename = "figures_annex/trans_prob.pdf",
+  scale = 1.2,
+  dpi = 300
+)
 
 # ------------------------------------------------------------------- #
 # Prevalence weighted mortality before and after ADJ.
@@ -232,10 +361,8 @@ hazards_unadj <- read_csv("Data/model2/unadj_haz_replicates.csv.gz", show_col_ty
   ) %>% 
   select(-H_U) %>%
   mutate(
-    mx = (1 - prevalence) * H_D +
-      prevalence  * U_D
-  ) %>%
-  arrange(replicate, female, age) 
+    mx = (1 - prevalence) * H_D + prevalence  * U_D) %>%
+  arrange(replicate, female, year, age) 
 
 # ABsolutely the same procedure just for adjusted
 hazards_adj <- read_csv("Data/model2/adj_haz_replicates.csv.gz", show_col_types = FALSE) %>%
@@ -255,13 +382,23 @@ hazards_adj <- read_csv("Data/model2/adj_haz_replicates.csv.gz", show_col_types 
   ) %>% 
   select(-H_U) %>%
   mutate(
-    mx = (1 - prevalence) * H_D +
-      prevalence  * U_D
-  ) %>%
-  arrange(replicate, female, age) 
+    mx = (1 - prevalence) * H_D + prevalence  * U_D) %>%
+  arrange(replicate, female, year, age) 
 
 
-# unite hazards
+unique(diff(sort(unique(hazards_unadj$age))))
+
+summary(hazards_unadj$mx)
+
+hazards_unadj %>%
+  group_by(replicate, year, female) %>%
+  summarise(n=n())
+
+hazards_unadj %>%
+  group_by(year,female) %>%
+  summarise(first=min(age), last=max(age))
+
+# unite hazards and calculate overall mx
 mx_plot <- bind_rows(
   hazards_unadj %>% 
     group_by(female, year, age) %>%
