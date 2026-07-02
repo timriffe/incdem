@@ -71,6 +71,31 @@ ls()
 # model 2       #
 # ------------- #
 
+# which replicate is the median e50?
+# probs <- read_csv("Data/model2/probs.csv.gz")
+# # expectancies, age 50
+# e50 <- calc_exs(probs = probs,
+#          from_age = 50, 
+#          age_interval = 0.25, 
+#          init = c(`1` = 1, `2` = 0),
+#          init_method = "init", 
+#          from_col = "from", 
+#          to_col = "to", 
+#          age_col = "age", 
+#          p_col = "p", 
+#          group_cols = c("replicate", "female", "year"), 
+#          trans_col = "transition") |> 
+#   ungroup()
+# 
+# # females 295
+# # males 605
+# e50 |> 
+#   filter(year == 2019,
+#          female == 0) |> 
+#   mutate(LE = DFLE + DLE,
+#          res = LE - median(LE)) |> 
+#   filter(res == min(abs(res)))
+
 probs <- read_csv("Data/model2/probs.csv.gz")
 # expectancies, age 50
 calc_exs(probs = probs,
