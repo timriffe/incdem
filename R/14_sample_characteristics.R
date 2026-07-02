@@ -106,11 +106,11 @@ hrs_to_fit_prepped <- hrs_to_fit |>
                              obs_date > 2015 ~ "period 3",
                              TRUE ~ "other"),
          year = floor(obs_date)) |>
-  select(wave, 
-         hhidpn, female, education,
-         pwt = wtcrnh, age, hypertension:stroke,
-         state_msm, ever_dementia, obstype, period5,
-         year) |> 
+  # select(wave, 
+  #        hhidpn, female, education,
+  #        pwt = wtcrnh, age, hypertension:stroke,
+  #        state_msm, ever_dementia, obstype, period5,
+  #        year) |> 
   filter(period5 != "other",
          year > 2003,
          state_msm != 3) |> 
@@ -156,15 +156,43 @@ mean(exposure$df)
 sd(exposure$df)
 
 # wave spacing
-wave_spacing <- hrs_to_fit_prepped %>% 
-  select(hhidpn, year) %>%
-  arrange(hhidpn, year) %>%
+wave_spacing <- hrs_to_fit_prepped %>%
+  arrange(hhidpn, iwmid) %>%
   group_by(hhidpn) %>%
   mutate(
-    spacing = year - lag(year)
+    spacing_days = iwmid - lag(iwmid),
+    spacing_years = spacing_days / 365.25
   ) %>%
-  ungroup() %>%
-  filter(!is.na(spacing)) %>% 
-  filter(spacing > 0)
+  ungroup()
 
-janitor::tabyl(wave_spacing$spacing)
+# Done
+ggplot(wave_spacing, aes(spacing_years)) +
+  geom_density(na.rm = TRUE) + 
+  theme_bw(base_size = 14) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.spacing = unit(1.1, "lines"),
+    axis.title = element_text(size = 12, color = "black"),
+    axis.text = element_text(size = 10, color = "black"),
+    strip.text = element_text(
+      face = "bold",
+      size = 10, 
+      color = "black"
+    ),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold", color = "black"),
+    legend.box = "horizontal",
+    plot.title = element_text(
+      face = "bold",
+      size = 14, 
+      color = "black"
+    ))+
+  labs(
+    x = "Spacing in Years",
+    y = "Density"
+  )
+
+ggsave(
+  filename = "figures_annex/wave_density.pdf",
+  dpi = 300
+)
