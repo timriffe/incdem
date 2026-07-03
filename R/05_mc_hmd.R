@@ -74,7 +74,10 @@ external_ref_quarter <- external_ref %>%
                            m = 1, 
                            k = 11, 
                            age_interval_out = 0.25)) %>%
-  ungroup()
+  ungroup() |> 
+  mutate(mx = c(mx))
+
+write_csv(external_ref_quarter,file = "Data/external_ref_point.csv")
 
 external_ref |> 
   mutate(mx = deaths / exposure) |> 
