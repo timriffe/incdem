@@ -214,9 +214,9 @@ hrs_msm <- hrs_joined |>
   ) |> 
   arrange(hhidpn, age) |>
   # mutate(age_diff = age - (int_date_decimal - decimal_date(as_date(birth_date, origin = "1960-01-01")))) |> 
-  mutate(
-    state_msm = state + 1  # msm expects states starting at 1
-  ) |> 
+  # mutate(
+  #   state_msm = state + 1  # msm expects states starting at 1
+  # ) |> 
   group_by(hhidpn) |> 
   # supposed to remove solitary observations.
   filter(n() > 1) |> 
@@ -245,6 +245,9 @@ hrs_msm <- hrs_msm |>
   ) |>
   filter(!(died & state_clean != 2)) |> 
   ungroup() |> 
+  mutate(
+    state_msm = state_clean + 1  # msm expects states starting at 1
+  ) |> 
   arrange(hhidpn, age) |> 
   # treat death times as exact, but othe transition
   # times as unknown.
