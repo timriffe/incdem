@@ -106,18 +106,20 @@ hrs_to_fit_prepped <- hrs_to_fit |>
                              obs_date > 2015 ~ "period 3",
                              TRUE ~ "other"),
          year = floor(obs_date)) |>
-  # select(wave, 
-  #        hhidpn, female, education,
-  #        pwt = wtcrnh, age, hypertension:stroke,
-  #        state_msm, ever_dementia, obstype, period5,
-  #        year) |> 
+  select(hhidpn, female, education,
+         pwt = wtcrnh, age, hypertension:stroke,
+         state_msm, ever_dementia, obstype, period5,
+         year) |> 
   filter(period5 != "other",
-         year > 2003,
-         state_msm != 3) |> 
-  mutate(period = as.factor(period5))
+         year > 2003) |> 
+  mutate(period = as.factor(period5)) %>% 
+  group_by(hhidpn) |> 
+  # supposed to remove solitary observations.
+  filter(n() > 1) |>
+  ungroup()
 
 # number of people in sample 
-hrs_to_fit_prepped %>% 
+hrs_to_fit_prepped %>%
   pull(hhidpn) %>% 
   unique() %>%
   length()
@@ -130,8 +132,10 @@ hrs_to_fit_prepped %>%
 
 # mean sd age at baseline (first appearance)
 hrs_to_fit_prepped %>% 
-  select(hhidpn, female, age) %>%
-  filter(age == min(age), .by = "hhidpn") %>%
+  select(hhidpn, age) %>%
+  group_by(hhidpn) %>% 
+  filter(age == min(age)) %>%
+  ungroup() %>% 
   summarise(m_age = mean(age),
             s_age = sd(age))
 
@@ -154,6 +158,22 @@ exposure <- hrs_to_fit_prepped %>%
 
 mean(exposure$df)
 sd(exposure$df)
+
+
+# distribution by sex
+exposure <- hrs_to_fit_prepped %>% 
+  select(hhidpn, female, age) %>%
+  group_by(hhidpn, female) %>%
+  summarise(
+    df = max(age) - min(age),
+    .groups = "drop"
+  ) %>% 
+  filter(df > 0)
+
+exposure %>% 
+  group_by(female) %>% 
+  summarise(df1 = mean(df),
+            df2 = sd(df))
 
 # wave spacing
 wave_spacing <- hrs_to_fit_prepped %>%
