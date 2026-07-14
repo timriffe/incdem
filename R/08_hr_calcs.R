@@ -32,9 +32,9 @@ transitions_keep <- tibble::tribble(
   2,     3,   "UD",        "Lx2"
 )
 
-# ------------- #
-# read and trim #
-# ------------- #
+# --------------- #
+# read and subset #
+# --------------- #
 
 haz <- readr::read_csv(file.path(data_dir, "adj_haz_replicates.csv.gz"), show_col_types = FALSE) |>
   dplyr::filter(
