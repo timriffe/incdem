@@ -4,7 +4,9 @@
 # 1. change 2019/2004
 # 2. sex (m/f)
 
-# To do this, we need to age-standardize somehow. It makes sense to me (TR) to age standardize using the corresponding stationary occupancy times. That is, use lh to weight HD and HU, and use lu to weight UD. Makes sense to me anyway. For time, we can take the avg of ls and the start and end. For sex, we can take the avg as well, and we'll do it for just 2004 and 2019 to keep it simple.
+# To do this, we need to age-standardize somehow. It makes sense to me to age standardize using the corresponding stationary occupancy times. 
+# That is, use lh to weight HD and HU, and use lu to weight UD. Makes sense to me anyway. For time, we can take the avg of ls and the start and end. 
+# For sex, we can take the avg as well, and we'll do it for just 2004 and 2019 to keep it simple.
 
 source("R/00_dependencies.R")
 source("R/01_functions_extra.R")
@@ -138,7 +140,7 @@ change_summary <- change_hrs |>
   )
 change_summary # for males, HD and HU significant changes
 # for females only HU significant change.
-# TR: this is mostly due to high uncertainty in the start of 
+# this is mostly due to high uncertainty in the start of 
 # observation. Comparing w 2010 might be significant for everything?
 # ------------- #
 # sex HRs       #

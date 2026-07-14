@@ -146,7 +146,7 @@ hrs_to_fit_prepped %>%
   summarise(m_age = mean(age),
             s_age = sd(age), .by = "female")
 
-# distribution of individual follow-up duration (years) Exposure?
+# distribution of individual follow-up duration (years) Exposure
 exposure <- hrs_to_fit_prepped %>% 
   select(hhidpn, age) %>%
   group_by(hhidpn) %>%

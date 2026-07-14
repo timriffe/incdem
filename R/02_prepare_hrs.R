@@ -149,7 +149,7 @@ hrs_joined <- hrs_long |>
          diabetes      = diabe_status,
          heart_disease = hearte_status,
          stroke        = stroke_status) |> 
-  # TR: new 25-6-2026
+  # new 25-6-2026
   mutate(age = if_else(is.na(age),age_imputed,age)) |> 
   select(-age_imputed) |> 
   arrange(hhidpn, age) |> 
@@ -160,30 +160,6 @@ hrs_joined <- hrs_long |>
 
 
 # View result
-# write_csv(hrs_joined, "./Data/rand_hrs_processed.csv")
- # hrs_jordan <- read_csv("Data/riffe_incdem_20250522.csv") |> 
- #   mutate(hhidpn = sprintf("%09.0f", hhidpn)) |> 
- #   select(hhidpn, wave, age_jordan = age, state_jordan = state)
- # 
- # hrs_joined |> 
- #   select(hhidpn,
- #          wave,
- #          age_orig = age,
- #          age_test = age_imputed,
- #          state_test = state,
- #          int_date,
- #          birth_date,
- #          raddate,
- #          age_death,
- #          iwstat,
- #          iwmid) |>   
- #   right_join(hrs_jordan,
- #              by = join_by(hhidpn, wave)) |>    
- #   mutate(age_check = age_test - age_jordan,
- #          state_check = state_test - state_jordan) |> 
- #   filter(abs(zapsmall(state_check))>.2) 
-   
-# 
 # 
 # cog |> 
 #    filter(hhidpn == "010099010") |> 
@@ -203,10 +179,8 @@ hrs_joined <- hrs_long |>
  # early_dementia
 # ------------------------------------------------------------------- #
 # first pass processing
-# hrs_msm <- hrs_joined |>
 hrs_msm <- hrs_joined |> 
   # pick age range to fit to, based on plot of support.
-  # filter(between(age, 55, 97)) |> 
   mutate(
     int_date         = suppressWarnings(as.integer(int_date)),
     interview_date   = as_date(int_date, origin = "1960-01-01"),
@@ -253,8 +227,7 @@ hrs_msm <- hrs_msm |>
   # times as unknown.
   mutate(obstype = ifelse(state_msm == 3, 3, 1)) |>
   # ------------------------------------------------------------------- #
-  # RT: After cleaning we have to remove a solitary obs. one more time
-  # 190 persons, they provide no information
+  # After cleaning we have to remove a solitary obs. one more time
   group_by(hhidpn) |> 
   # supposed to remove solitary observations.
   filter(n() > 1) |>
@@ -264,17 +237,6 @@ hrs_msm <- hrs_msm |>
 nas <- hrs_msm |>
   is.na() |>
   colSums()
-
-# 360 misses in race are legit. 
-# 54 in education too
-# there are 25287 entries with unknown int_date
-# these cases are also missing the health covariate info
-# but they have a state info
-# What should we do with such cases?
-# TR: states were interpolated for these cases. To the extent that health covariates
-# are to be treated as "ever" or "destined to / ever" variables, then we should 
-# impute.
-# nas[nas > 0]
 # ------------------------------------------------------------------- #
 # Since all health conditions are "ever had" 
 # We can obtain extra 28181 from 99887 missing cases
@@ -291,7 +253,7 @@ hrs_msm <- hrs_msm |>
 #   is.na() |> 
 #   colSums()
 
-# create obs_date code by TR
+# create obs_date code
 hrs_to_fit <- hrs_msm |>
   # a test condition to check pandemic effect on mort trend
   mutate(

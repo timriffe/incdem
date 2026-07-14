@@ -72,40 +72,6 @@ ggsave(
 
 # ------------------------------------------------------------------------ #
 # State space
-# grViz("
-# digraph dementia_states {
-#   
-#   # Общие стили графа
-#   graph [rankdir = LR, fontsize=12, labelloc='t', label='State-Space Diagram: Dementia and Death', fontname=Helvetica]
-#   
-#   # Узлы с цветами и формой
-#   node [shape = circle, style = filled, fontname = Helvetica, fontsize=12, width=1.2]
-#   
-#   NoDementia [label='No Dementia\\n(0)', fillcolor='lightblue']
-#   Dementia  [label='Dementia\\n(1)', fillcolor='orange']
-#   Death     [label='Death\\n(2)', fillcolor='red']
-#   
-#   # Переходы
-#   NoDementia -> Dementia [label='0→1', color='orange', fontcolor='orange', penwidth=2]
-#   NoDementia -> Death    [label='0→2', color='red', fontcolor='red', penwidth=2]
-#   Dementia -> Death      [label='1→2', color='red', fontcolor='red', penwidth=2]
-#   
-#   # Подпись снизу
-#   subgraph legend {
-#     label='Note: Dementia and Death are absorbing states'
-#     fontsize=10
-#     style=invis
-#   }
-# }
-# ")
-
-# ggsave(
-#   filename = "figures_annex/state_space.pdf",
-#   dpi = 300
-# )
-library(DiagrammeR)
-library(DiagrammeRsvg)
-library(rsvg)
 
 g <- grViz("
 digraph dementia_states {
@@ -167,7 +133,7 @@ subgraph cluster_legend {
 }
 ")
 
-# сохранить как PDF
+# save as PDF
 svg <- export_svg(g)
 
 rsvg_pdf(
@@ -211,59 +177,6 @@ haz <- read_csv("Data/model2/adj_haz_replicates.csv.gz", show_col_types = FALSE)
 
 # before and after adjustment hazards all 3
 # FOr incidence adjusted and unadjusted are equal
-# REMOVE
-# FOund another question dementia free hazards are higher for men than dementia in older ages
-# haz %>% 
-#   full_join(haz_unadj) %>% 
-#   mutate(female = ifelse(female == 1, "Men", "Women"),
-#          female = factor(female, levels = c("Men", "Women"))) %>% 
-#   separate(Transtion, c("From", "To")) %>%
-#   mutate(across(c(From, To), ~ case_when(
-#     . == "U" ~ "Dementia",
-#     . == "H" ~ "Dementia-free",
-#     . == "D" ~ "Death",
-#   ))) %>% 
-#   filter(year %in% c(2019)) %>%
-#   filter(To != "Dementia") %>%
-#   # filter(To == "Dementia") %>% 
-#   # select(-lower, -upper) %>% 
-#   # pivot_wider(names_from = Hazards,
-#   #             values_from = p_med ) %>% 
-#   # select(-year)
-#   ggplot(aes(x = age, y = p_med, color = To, linetype = Hazards)) +
-#   geom_line(linewidth = 1) + 
-#   geom_ribbon(
-#     aes(ymin = lower, ymax = upper, fill = To),
-#     alpha = 0.12,
-#     color = NA
-#   ) +
-#   scale_fill_brewer(
-#     palette = "Dark2"
-#   )+
-#   scale_color_brewer(
-#     palette = "Dark2"
-#   ) +
-#   theme_bw(base_family = "Arial", base_size = 10) +
-#   scale_y_log10() +
-#   facet_grid(female ~ From, switch = "y") + 
-#   theme(
-#     strip.placement = "outside",
-#     strip.background = element_blank(),
-#     panel.grid.minor = element_blank(),
-#     panel.spacing = unit(1.1, "lines"),
-#     legend.position = "bottom",
-#     axis.title = element_text(size = 10, color = "black", face = "bold"),
-#     axis.text = element_text(size = 10, color = "black"),
-#     strip.text = element_text(size = 10, face = "bold", color = "black"),
-#     legend.title = element_text(size = 10, face = "bold", color = "black"),
-#     legend.text = element_text(size = 10, color = "black"),
-#     legend.box = "horizontal")+
-#   labs(
-#     x = "Age (years)",
-#     y = "Mortality hazard (log scale), 95% CI",
-#     color = "To",
-#     fill = "To"
-#   )
 
 haz %>% 
   full_join(haz_unadj) %>% 
@@ -381,8 +294,7 @@ ggsave(
 # )
 
 # ------------------------------------------------------------------------ #
-# adjusted transtiion probabilities if needed can improve quality
-# I think it is not needed
+# adjusted transtiion probabilities
 probs <- read_csv("Data/model2/probs.csv.gz")
 probs %>% 
   filter(year == 2019) %>% 
@@ -556,147 +468,3 @@ ggsave(
   device = cairo_pdf,
   dpi = 300
 )
-
-# ------------------------------------------------------------------- #
-# Prevalence weighted mortality before and after ADJ.
-# CHECK!
-prev <- read_csv("Data/model2/prev_replicates.csv.gz",show_col_types = FALSE)
-
-hazards_unadj <- read_csv("Data/model2/unadj_haz_replicates.csv.gz", show_col_types = FALSE) %>% 
-  filter(to > from) |> # create c from and to columns
-  mutate(from = ifelse(from == 1, "H", "U"),
-         to   = case_when(
-           to == 1 ~ "H",
-           to == 2 ~ "U",
-           to == 3 ~ "D"
-         )) %>% 
-  mutate(transition = paste0(from, "_", to)) %>%
-  select(-from, -to) %>%
-  pivot_wider(names_from = transition, values_from = haz) %>%
-  left_join(
-    prev,
-    by = join_by(replicate, age, female, year)
-  ) %>% 
-  select(-H_U) %>%
-  mutate(
-    mx = (1 - prevalence) * H_D + prevalence  * U_D) %>%
-  arrange(replicate, female, year, age) 
-
-# Absolutely the same procedure just for adjusted
-hazards_adj <- read_csv("Data/model2/adj_haz_replicates.csv.gz", show_col_types = FALSE) %>%
-  filter(to > from) |> # create c from and to columns
-  mutate(from = ifelse(from == 1, "H", "U"),
-         to   = case_when(
-           to == 1 ~ "H",
-           to == 2 ~ "U",
-           to == 3 ~ "D"
-         )) %>% 
-  mutate(transition = paste0(from, "_", to)) %>%
-  select(-from, -to) %>%
-  pivot_wider(names_from = transition, values_from = haz) %>%
-  left_join(
-    prev,
-    by = join_by(replicate, age, female, year)
-  ) %>% 
-  select(-H_U) %>%
-  mutate(
-    mx = (1 - prevalence) * H_D + prevalence  * U_D) %>%
-  arrange(replicate, female, year, age) 
-
-
-unique(diff(sort(unique(hazards_unadj$age))))
-
-summary(hazards_unadj$mx)
-
-hazards_unadj %>%
-  group_by(replicate, year, female) %>%
-  summarise(n=n())
-
-hazards_unadj %>%
-  group_by(year,female) %>%
-  summarise(first=min(age), last=max(age))
-
-# unite hazards and calculate overall mx
-mx_plot <- bind_rows(
-  hazards_unadj %>% 
-    group_by(female, year, age) %>%
-    summarise(
-      p_med = median(mx),
-      lower = quantile(mx, 0.025),
-      upper = quantile(mx, 0.975),
-      .groups = "drop"
-    ) %>% 
-    mutate(Hazards = "Before adjustment"),
-  hazards_adj   %>%
-    # summarise bands     
-    group_by(female, year, age) %>%
-    summarise(
-      p_med = median(mx),
-      lower = quantile(mx, 0.025),
-      upper = quantile(mx, 0.975),
-      .groups = "drop"
-    ) %>% 
-    mutate(Hazards = "After adjustment")
-)
-# ------------------------------------------------------------------- #
-# Resulting e50 calculation before and after
-unadj_e50 <- hazards_unadj %>% 
-  group_by(replicate, year, female) %>%
-  summarise(
-    # I assume quarters     
-    e50 = sum(exp(-cumsum(mx * 0.25))) * 0.25,
-    .groups = "drop"
-  )
-
-unadj_e50_summary <- unadj_e50 %>%
-  group_by(female, year) %>%
-  summarise(
-    e50 = median(e50, na.rm = TRUE),
-    lower = quantile(e50, 0.025, na.rm = TRUE),
-    upper = quantile(e50, 0.975, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# absolutely the same for adjusted
-adj_e50 <- hazards_adj %>% 
-  group_by(replicate, year, female) %>%
-  summarise(
-    e50 = sum(exp(-cumsum(mx * 0.25))) * 0.25,
-    .groups = "drop"
-  )
-
-adj_e50_summary <- adj_e50 %>%
-  group_by(female, year) %>%
-  summarise(
-    e50 = median(e50, na.rm = TRUE),
-    lower = quantile(e50, 0.025, na.rm = TRUE),
-    upper = quantile(e50, 0.975, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# join
-e50_plot <- bind_rows(
-  unadj_e50_summary %>% 
-    mutate(Hazards = "Before adjustment"),
-  adj_e50_summary %>%
-    mutate(Hazards = "After adjustment")
-) %>%
-  mutate(female = ifelse(female == 1, "Female", "Male"))
-
-# Something wrong
-e50_plot %>% 
-  ggplot(
-  aes(
-    x = year,
-    y = e50,
-    color = female,
-    linetype = Hazards,
-    group = interaction(female, Hazards)
-  )
-) +
-  geom_line(
-    linewidth = 1
-  ) +
-  geom_point(
-    size = 2
-  )

@@ -186,7 +186,7 @@ fig2 |>
   
   coord_cartesian(clip = "on") +
   
-  theme_bw(base_size = 12) +
+  theme_bw(base_family = "Arial", base_size = 10) +
   
   theme(
     strip.placement = "outside",
@@ -233,7 +233,7 @@ ggsave(filename = "figures_annex/hazards.pdf", width = 20, height = 15, units = 
 
 
 # ------------------------------------------------------------------- #
-# LE with and without dimentia
+# LE with and without dementia
 
 ex2 <- read_csv("Data/model2/e50.csv.gz")
 
@@ -408,7 +408,7 @@ prop |>
       byrow = TRUE
     )
   ) +
-  theme_bw(base_size = 12) +
+  theme_bw(base_family = "Arial", base_size = 10) +
   theme(
     strip.background = element_blank(),
 
