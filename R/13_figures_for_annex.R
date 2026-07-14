@@ -43,56 +43,102 @@ ggplot(df, aes(x = wave)) +
   annotate("segment", x = 5, xend = 16, y = 0.2, yend = 0.2, 
            arrow = arrow(length = unit(0.3, "cm")), color = "red", size = 1) +
   annotate("text", x = 10.5, y = 0.4, 
-           label = "All observations after first 'Yes' are treated as 'Yes'", 
+           label = "All observations after first 'Yes (Dementia)' are treated as 'Yes'", 
            color = "red", size = 4, fontface = "bold") +
-  
   scale_x_continuous(breaks = 5:16) +
   scale_y_continuous(breaks = c(1.5, 3), labels = c("Person 1", "Person 2")) +
-  theme_minimal() +
-  theme(axis.title.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.text.y = element_text(size = 11),
-        legend.position = "top") +
-  labs(x = "Wave", color = "Status")
-
+  theme_minimal(base_family = "Arial", base_size = 10) +
+  theme(  axis.title = element_text(size = 10, color = "black", face = "bold"),
+          axis.text = element_text(size = 10, color = "black"),
+          strip.text = element_text(size = 10, face = "bold", color = "black"),
+          legend.title = element_text(size = 10, face = "bold", color = "black"),
+          legend.text = element_text(size = 10, color = "black"),
+          legend.position = "bottom") +
+  labs(x     = "HRS Wave",
+       color = "Dementia status",
+       y     = "Observed person") + 
+  scale_fill_brewer(
+    palette = "Dark2"
+  )+
+  scale_color_brewer(
+    palette = "Dark2"
+  )
 
 ggsave(
   filename = "figures_annex/state_registration.pdf",
+  device = cairo_pdf,
   dpi = 300
 )
 
 # ------------------------------------------------------------------------ #
 # State space
-grViz("
+
+g <- grViz("
 digraph dementia_states {
-  
-  # Общие стили графа
-  graph [rankdir = LR, fontsize=12, labelloc='t', label='State-Space Diagram: Dementia and Death', fontname=Helvetica]
-  
-  # Узлы с цветами и формой
-  node [shape = circle, style = filled, fontname = Helvetica, fontsize=12, width=1.2]
-  
-  NoDementia [label='No Dementia\\n(0)', fillcolor='lightblue']
-  Dementia  [label='Dementia\\n(1)', fillcolor='orange']
-  Death     [label='Death\\n(2)', fillcolor='red']
-  
-  # Переходы
-  NoDementia -> Dementia [label='0→1', color='orange', fontcolor='orange', penwidth=2]
-  NoDementia -> Death    [label='0→2', color='red', fontcolor='red', penwidth=2]
-  Dementia -> Death      [label='1→2', color='red', fontcolor='red', penwidth=2]
-  
-  # Подпись снизу
-  subgraph legend {
-    label='Note: Dementia and Death are absorbing states'
-    fontsize=10
-    style=invis
-  }
+
+graph [
+  rankdir = LR,
+  bgcolor = white
+]
+
+node [
+  shape = circle,
+  style = filled,
+  fontname = Arial,
+  fontsize = 10,
+  width = 1.1,
+  height = 1.1
+]
+
+edge [
+  fontname = Arial,
+  fontsize = 10,
+  penwidth = 1.5
+]
+
+Healthy [
+  label = 'Dementia-free\\n(0)',
+  fillcolor = '#D9EAF7'
+]
+
+Dementia [
+  label = 'With Dementia\\n(1)',
+  fillcolor = '#FCE4D6'
+]
+
+Death [
+  label = 'Death\\n(2)',
+  fillcolor = '#E6E6E6'
+]
+
+Healthy -> Dementia [
+  label = '0 → 1'
+]
+
+Healthy -> Death [
+  label = '0 → 2'
+]
+
+Dementia -> Death [
+  label = '1 → 2'
+]
+
+subgraph cluster_legend {
+  label = 'Note: Dementia and death are absorbing states.'
+  fontname = Arial
+  fontsize = 8
+  style = invis
+}
+
 }
 ")
 
-ggsave(
-  filename = "figures_annex/state_space.pdf",
-  dpi = 300
+# save as PDF
+svg <- export_svg(g)
+
+rsvg_pdf(
+  charToRaw(svg),
+  file = "figures_annex/state_space_diagram1.pdf"
 )
 # ------------------------------------------------------------------------ #
 # ADJ and UNADJ trans hazards
@@ -130,6 +176,8 @@ haz <- read_csv("Data/model2/adj_haz_replicates.csv.gz", show_col_types = FALSE)
   mutate(Hazards = "Adjusted")
 
 # before and after adjustment hazards all 3
+# FOr incidence adjusted and unadjusted are equal
+
 haz %>% 
   full_join(haz_unadj) %>% 
   mutate(female = ifelse(female == 1, "Men", "Women"),
@@ -140,11 +188,14 @@ haz %>%
     . == "H" ~ "Dementia-free",
     . == "D" ~ "Death",
   ))) %>% 
-  filter(year %in% c(2019)) %>%
-  ggplot(aes(x = age, y = p_med, color = To, linetype = Hazards)) +
+  filter(year %in% c(2004, 2019)) %>%
+  filter(To == "Death") %>%
+  select(-To) %>% 
+  mutate(year = as.factor(year)) %>% 
+  ggplot(aes(x = age, y = p_med, color = year, linetype = Hazards)) +
   geom_line(linewidth = 1) + 
   geom_ribbon(
-    aes(ymin = lower, ymax = upper, fill = To),
+    aes(ymin = lower, ymax = upper, fill = year),
     alpha = 0.12,
     color = NA
   ) +
@@ -154,67 +205,7 @@ haz %>%
   scale_color_brewer(
     palette = "Dark2"
   ) +
-  theme_bw(base_size = 14) +
-  scale_y_log10()+
-  facet_grid(female ~ From, switch = "y") + 
-  theme(
-    strip.placement = "outside",
-    strip.background = element_blank(),
-    panel.grid.minor = element_blank(),
-    panel.spacing = unit(1.1, "lines"),
-    axis.title = element_text(size = 12, color = "black"),
-    axis.text = element_text(size = 10, color = "black"),
-    strip.text = element_text(
-      face = "bold",
-      size = 10, 
-      color = "black"
-    ),
-    legend.position = "bottom",
-    legend.title = element_text(face = "bold", color = "black"),
-    legend.box = "horizontal",
-    plot.title = element_text(
-      face = "bold",
-      size = 14, 
-      color = "black"
-    ))+
-  labs(
-    x = "Age",
-    y = "Transition hazard (log scale)",
-    color = "To",
-    fill = "To"
-  )
-
-ggsave(
-  filename = "figures_annex/hazards_1.pdf",
-  dpi = 300
-)
-
-haz %>% 
-  full_join(haz_unadj) %>% 
-  mutate(female = ifelse(female == 1, "Men", "Women"),
-         female = factor(female, levels = c("Men", "Women"))) %>% 
-  separate(Transtion, c("From", "To")) %>%
-  mutate(across(c(From, To), ~ case_when(
-    . == "U" ~ "Dementia",
-    . == "H" ~ "Dementia-free",
-    . == "D" ~ "Death",
-  ))) %>%
-  filter(To != "Dementia") %>% 
-  mutate(Year = as.factor(year)) %>% 
-  ggplot(aes(x = age, y = p_med, color = Year, linetype = Hazards)) +
-  geom_line(linewidth = 1) + 
-  geom_ribbon(
-    aes(ymin = lower, ymax = upper, fill = Year),
-    alpha = 0.12,
-    color = NA
-  ) +
-  scale_fill_brewer(
-    palette = "Dark2"
-  )+
-  scale_color_brewer(
-    palette = "Dark2"
-  ) +
-  theme_bw(base_size = 14) +
+  theme_bw(base_family = "Arial", base_size = 10) +
   scale_y_log10() +
   facet_grid(female ~ From, switch = "y") + 
   theme(
@@ -222,36 +213,88 @@ haz %>%
     strip.background = element_blank(),
     panel.grid.minor = element_blank(),
     panel.spacing = unit(1.1, "lines"),
-    axis.title = element_text(size = 12, color = "black"),
-    axis.text = element_text(size = 10, color = "black"),
-    strip.text = element_text(
-      face = "bold",
-      size = 10, 
-      color = "black"
-    ),
     legend.position = "bottom",
-    legend.title = element_text(face = "bold", color = "black"),
-    legend.box = "horizontal",
-    plot.title = element_text(
-      face = "bold",
-      size = 14, 
-      color = "black"
-    ))+
+    axis.title = element_text(size = 10, color = "black", face = "bold"),
+    axis.text = element_text(size = 10, color = "black"),
+    strip.text = element_text(size = 10, face = "bold", color = "black"),
+    legend.title = element_text(size = 10, face = "bold", color = "black"),
+    legend.text = element_text(size = 10, color = "black"),
+    legend.box = "horizontal")+
   labs(
-    x = "Age",
-    y = "Transition hazard (log scale)",
+    x = "Age (years)",
+    y = "Mortality hazard (log scale), 95% CI",
     color = "Year",
     fill = "Year"
   )
 
 ggsave(
-  filename = "figures_annex/hazards_years.pdf",
+  filename = "figures_annex/haz_2004_2019_adj_uadj.pdf",
+  device = cairo_pdf,
   dpi = 300
 )
 
+# haz %>% 
+#   full_join(haz_unadj) %>% 
+#   mutate(female = ifelse(female == 1, "Men", "Women"),
+#          female = factor(female, levels = c("Men", "Women"))) %>% 
+#   separate(Transtion, c("From", "To")) %>%
+#   mutate(across(c(From, To), ~ case_when(
+#     . == "U" ~ "Dementia",
+#     . == "H" ~ "Dementia-free",
+#     . == "D" ~ "Death",
+#   ))) %>%
+#   filter(To != "Dementia") %>% 
+#   mutate(Year = as.factor(year)) %>% 
+#   ggplot(aes(x = age, y = p_med, color = Year, linetype = Hazards)) +
+#   geom_line(linewidth = 1) + 
+#   geom_ribbon(
+#     aes(ymin = lower, ymax = upper, fill = Year),
+#     alpha = 0.12,
+#     color = NA
+#   ) +
+#   scale_fill_brewer(
+#     palette = "Dark2"
+#   )+
+#   scale_color_brewer(
+#     palette = "Dark2"
+#   ) +
+#   theme_bw(base_size = 14) +
+#   scale_y_log10() +
+#   facet_grid(female ~ From, switch = "y") + 
+#   theme(
+#     strip.placement = "outside",
+#     strip.background = element_blank(),
+#     panel.grid.minor = element_blank(),
+#     panel.spacing = unit(1.1, "lines"),
+#     axis.title = element_text(size = 12, color = "black"),
+#     axis.text = element_text(size = 10, color = "black"),
+#     strip.text = element_text(
+#       face = "bold",
+#       size = 10, 
+#       color = "black"
+#     ),
+#     legend.position = "bottom",
+#     legend.title = element_text(face = "bold", color = "black"),
+#     legend.box = "horizontal",
+#     plot.title = element_text(
+#       face = "bold",
+#       size = 14, 
+#       color = "black"
+#     ))+
+#   labs(
+#     x = "Age",
+#     y = "Transition hazard (log scale)",
+#     color = "Year",
+#     fill = "Year"
+#   )
+# 
+# ggsave(
+#   filename = "figures_annex/hazards_years.pdf",
+#   dpi = 300
+# )
+
 # ------------------------------------------------------------------------ #
-# adjusted transtiion probabilities if needed can improve quality
-# I think it is not needed
+# adjusted transtiion probabilities
 probs <- read_csv("Data/model2/probs.csv.gz")
 probs %>% 
   filter(year == 2019) %>% 
@@ -301,7 +344,7 @@ probs %>%
   scale_color_brewer(
     palette = "Dark2"
   ) +
-  theme_bw(base_size = 14) +
+  theme_bw(base_family = "Arial", base_size = 10) +
   scale_y_log10() +
   facet_grid(
     female ~ From,
@@ -312,173 +355,116 @@ probs %>%
     strip.background = element_blank(),
     panel.grid.minor = element_blank(),
     panel.spacing = unit(1.1, "lines"),
-    axis.title = element_text(size = 12, color = "black"),
+    axis.title = element_text(size = 10, color = "black", face = "bold"),
     axis.text = element_text(size = 10, color = "black"),
-    strip.text = element_text(
-      face = "bold",
-      size = 10,
-      color = "black"
-    ),
+    strip.text = element_text(size = 10, face = "bold", color = "black"),
+    legend.title = element_text(size = 10, face = "bold", color = "black"),
+    legend.text = element_text(size = 10, color = "black"),
     legend.position = "bottom",
-    legend.title = element_text(
-      face = "bold",
-      color = "black"
-    ),
     legend.box = "horizontal"
   ) +
   labs(
-    x = "Age",
-    y = "Transition probability (log scale)",
+    x = "Age (years)",
+    y = "Transition probability (log scale), 95% CI",
     color = "To",
     fill = "To"
   )
 
 ggsave(
   filename = "figures_annex/trans_prob.pdf",
-  scale = 1.2,
+  device = cairo_pdf,
   dpi = 300
 )
 
-# ------------------------------------------------------------------- #
-# Prevalence weighted mortality before and after ADJ.
-# CHECK!
-prev <- read_csv("Data/model2/prev_replicates.csv.gz",show_col_types = FALSE)
 
-hazards_unadj <- read_csv("Data/model2/unadj_haz_replicates.csv.gz", show_col_types = FALSE) %>% 
-  filter(to > from) |> # create c from and to columns
-  mutate(from = ifelse(from == 1, "H", "U"),
-         to   = case_when(
-           to == 1 ~ "H",
-           to == 2 ~ "U",
-           to == 3 ~ "D"
-         )) %>% 
-  mutate(transition = paste0(from, "_", to)) %>%
-  select(-from, -to) %>%
-  pivot_wider(names_from = transition, values_from = haz) %>%
-  left_join(
-    prev,
-    by = join_by(replicate, age, female, year)
-  ) %>% 
-  select(-H_U) %>%
+
+prop <- read_csv("Data/model2/prop50.csv.gz")
+
+# prop |>
+#   mutate(
+#     female = factor(
+#       female,
+#       levels = c(0, 1),
+#       labels = c("Men", "Women")
+#     )
+#   ) |>
+#   mutate(across(c(prop50, lower, upper), ~ 1 - .)) %>% 
+#   filter(year %in% c(2004, 2019))
+
+
+prop |>
   mutate(
-    mx = (1 - prevalence) * H_D + prevalence  * U_D) %>%
-  arrange(replicate, female, year, age) 
-
-# ABsolutely the same procedure just for adjusted
-hazards_adj <- read_csv("Data/model2/adj_haz_replicates.csv.gz", show_col_types = FALSE) %>%
-  filter(to > from) |> # create c from and to columns
-  mutate(from = ifelse(from == 1, "H", "U"),
-         to   = case_when(
-           to == 1 ~ "H",
-           to == 2 ~ "U",
-           to == 3 ~ "D"
-         )) %>% 
-  mutate(transition = paste0(from, "_", to)) %>%
-  select(-from, -to) %>%
-  pivot_wider(names_from = transition, values_from = haz) %>%
-  left_join(
-    prev,
-    by = join_by(replicate, age, female, year)
-  ) %>% 
-  select(-H_U) %>%
-  mutate(
-    mx = (1 - prevalence) * H_D + prevalence  * U_D) %>%
-  arrange(replicate, female, year, age) 
-
-
-unique(diff(sort(unique(hazards_unadj$age))))
-
-summary(hazards_unadj$mx)
-
-hazards_unadj %>%
-  group_by(replicate, year, female) %>%
-  summarise(n=n())
-
-hazards_unadj %>%
-  group_by(year,female) %>%
-  summarise(first=min(age), last=max(age))
-
-# unite hazards and calculate overall mx
-mx_plot <- bind_rows(
-  hazards_unadj %>% 
-    group_by(female, year, age) %>%
-    summarise(
-      p_med = median(mx),
-      lower = quantile(mx, 0.025),
-      upper = quantile(mx, 0.975),
-      .groups = "drop"
-    ) %>% 
-    mutate(Hazards = "Before adjustment"),
-  hazards_adj   %>%
-    # summarise bands     
-    group_by(female, year, age) %>%
-    summarise(
-      p_med = median(mx),
-      lower = quantile(mx, 0.025),
-      upper = quantile(mx, 0.975),
-      .groups = "drop"
-    ) %>% 
-    mutate(Hazards = "After adjustment")
-)
-# ------------------------------------------------------------------- #
-# Resulting e50 calculation before and after
-unadj_e50 <- hazards_unadj %>% 
-  group_by(replicate, year, female) %>%
-  summarise(
-    # I assume quarters     
-    e50 = sum(exp(-cumsum(mx * 0.25))) * 0.25,
-    .groups = "drop"
-  )
-
-unadj_e50_summary <- unadj_e50 %>%
-  group_by(female, year) %>%
-  summarise(
-    e50 = median(e50, na.rm = TRUE),
-    lower = quantile(e50, 0.025, na.rm = TRUE),
-    upper = quantile(e50, 0.975, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# absolutely the same for adjusted
-adj_e50 <- hazards_adj %>% 
-  group_by(replicate, year, female) %>%
-  summarise(
-    e50 = sum(exp(-cumsum(mx * 0.25))) * 0.25,
-    .groups = "drop"
-  )
-
-adj_e50_summary <- adj_e50 %>%
-  group_by(female, year) %>%
-  summarise(
-    e50 = median(e50, na.rm = TRUE),
-    lower = quantile(e50, 0.025, na.rm = TRUE),
-    upper = quantile(e50, 0.975, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# join
-e50_plot <- bind_rows(
-  unadj_e50_summary %>% 
-    mutate(Hazards = "Before adjustment"),
-  adj_e50_summary %>%
-    mutate(Hazards = "After adjustment")
-) %>%
-  mutate(female = ifelse(female == 1, "Female", "Male"))
-
-# Something wrong
-e50_plot %>% 
+    female = factor(
+      female,
+      levels = c(0, 1),
+      labels = c("Men", "Women")
+    )
+  ) |>
+  mutate(across(c(prop50, lower, upper), ~ 1 - .)) %>% 
   ggplot(
-  aes(
-    x = year,
-    y = e50,
-    color = female,
-    linetype = Hazards,
-    group = interaction(female, Hazards)
-  )
-) +
-  geom_line(
-    linewidth = 1
+    aes(
+      x = year,
+      y = prop50,
+      color = female,
+      fill = female
+    )
   ) +
-  geom_point(
-    size = 2
+  # uncertainty intervals
+  geom_ribbon(
+    aes(
+      ymin = lower,
+      ymax = upper
+    ),
+    alpha = 0.18,
+    linewidth = 0.1,
+    linetype = "solid"
+  ) +
+  scale_fill_brewer(
+    palette = "Dark2"
+  )+
+  scale_color_brewer(
+    palette = "Dark2"
+  ) +
+  # central estimate
+  geom_line(linewidth = 1) +
+  geom_point(size = 1.8) +
+  facet_grid(
+    ~ female
+  ) +
+  scale_x_continuous(
+    breaks = seq(2004, 2019, 3)
+  ) +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  labs(
+    x = "Year",
+    y = "Proportion of remaining life spent with dementia at age 50, \n with 95% CI",
+    color = "Gender",
+    fill = "Gender"
+  ) +
+  guides(
+    color = guide_legend(
+      nrow = 1,
+      byrow = TRUE
+    )
+  ) +
+  theme_bw(base_family = "Arial", base_size = 10) +
+  theme(
+    strip.background = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title = element_text(size = 10, color = "black", face = "bold"),
+    axis.text = element_text(size = 10, color = "black"),
+    strip.text = element_text(size = 10, face = "bold", color = "black"),
+    legend.title = element_text(size = 10, face = "bold", color = "black"),
+    legend.text = element_text(size = 10, color = "black"),
+    legend.position = "bottom",
+    panel.spacing = unit(1.2, "lines")
   )
+
+
+ggsave(
+  filename = "figures_annex/proportion.pdf",
+  device = cairo_pdf,
+  dpi = 300
+)

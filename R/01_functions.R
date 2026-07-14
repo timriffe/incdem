@@ -671,7 +671,6 @@ make_boot_design <- function(
 
 ## ============================================================
 ## boot wrapper (this is the one your run is probably picking up
-## from zzz_boot_test_functions.R, so overwrite it with this)
 ## ============================================================
 # -------------------------------------------------------------------
 # Bootstrap wrapper around fit_msm()

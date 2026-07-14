@@ -24,6 +24,9 @@ library(vroom)
 library(purrr)
 library(mscalc) # remotes::install_github("timriffe/mscalc")
 library(colorspace)
+library(DiagrammeR)
+library(DiagrammeRsvg)
+library(rsvg)
 
 
 

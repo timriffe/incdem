@@ -47,6 +47,12 @@ prev |>
     breaks = seq(50, 100, 5),
     expand = expansion(mult = c(0, 0))
   ) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.2),
+    labels = scales::label_percent(accuracy = 1),
+    expand = c(0, 0)
+  ) +
   scale_fill_brewer(
     palette = "Dark2"
   )+
@@ -54,8 +60,8 @@ prev |>
     palette = "Dark2"
   ) +
   labs(
-    x = "Age",
-    y = "Prevalence of dementia",
+    x = "Age, (years)",
+    y = "Prevalence of dementia, (95% СI), percent",
     color = "Year",
     fill = "Year"
   ) +
@@ -66,23 +72,26 @@ prev |>
     )
   ) +
   coord_cartesian(clip = "on") +
-  theme_bw(base_size = 12) +
+  theme_bw(base_family = "Arial", base_size = 10) +
   theme(
+    axis.title = element_text(size = 10, color = "black", face = "bold"),
+    axis.text = element_text(size = 10, color = "black"),
+    strip.text = element_text(size = 10, face = "bold", color = "black"),
+    legend.title = element_text(size = 10, face = "bold", color = "black"),
+    legend.text = element_text(size = 10, color = "black"),
+    
     strip.placement = "outside",
     strip.background = element_blank(),
     panel.grid.minor = element_blank(),
     panel.spacing = unit(1.1, "lines"),
-    axis.title = element_text(size = 12, color = "black"),
-    axis.text = element_text(size = 10, color = "black"),
-    strip.text = element_text(
-      face = "bold",
-      size = 11, 
-      color = "black"
-    ),
     legend.position = "bottom",
-    legend.title = element_text(face = "bold"),
     legend.box = "horizontal"
   )
+
+windowsFonts(
+  Arial = windowsFont("Arial")
+)
+
 
 ggsave(filename = "figures_paper/fig1_prevalence.png", width = 15, height = 10, units = "cm")
 
@@ -177,7 +186,7 @@ fig2 |>
   
   coord_cartesian(clip = "on") +
   
-  theme_bw(base_size = 12) +
+  theme_bw(base_family = "Arial", base_size = 10) +
   
   theme(
     strip.placement = "outside",
@@ -224,7 +233,7 @@ ggsave(filename = "figures_annex/hazards.pdf", width = 20, height = 15, units = 
 
 
 # ------------------------------------------------------------------- #
-# LE with and without dimentia
+# LE with and without dementia
 
 ex2 <- read_csv("Data/model2/e50.csv.gz")
 
@@ -282,7 +291,7 @@ ex2 |>
   ) +
   labs(
     x = "Year",
-    y = "Life expectancy at age 50",
+    y = "Life expectancy at age 50 (years)",
     color = "Gender",
     fill = "Gender"
   ) +
@@ -292,20 +301,16 @@ ex2 |>
       byrow = TRUE
     )
   ) +
-  theme_bw(base_size = 12) +
+  theme_bw(base_family = "Arial", base_size = 10) +
   theme(
-    # strip.placement = "outside",
-    strip.background = element_blank(),
-    strip.text = element_text(
-      face = "bold",
-      size = 11, 
-      color = "black"
-    ),
-    panel.grid.minor = element_blank(),
-    axis.title = element_text(size = 12, color = "black"),
+    axis.title = element_text(size = 10, color = "black", face = "bold"),
     axis.text = element_text(size = 10, color = "black"),
+    strip.text = element_text(size = 10, face = "bold", color = "black"),
+    legend.title = element_text(size = 10, face = "bold", color = "black"),
+    legend.text = element_text(size = 10, color = "black"),
+    strip.background = element_blank(),
+    panel.grid.minor = element_blank(),
     legend.position = "bottom",
-    legend.title = element_text(face = "bold", color = "black"),
     panel.spacing = unit(1.2, "lines"))
 
 ggsave(filename = "figures_paper/fig3_e50.png", width = 15, height = 10, units = "cm")
@@ -329,10 +334,10 @@ ex2 |>
     )
   ) %>% 
   filter(year %in% c(2004, 2019)) %>% 
-  select(-state)
+  select(-state) %>% 
+  arrange(female, year)
 # ------------------------------------------------------------------- #
 prop <- read_csv("Data/model2/prop50.csv.gz")
-
 
 prop |>
   mutate(
@@ -403,7 +408,7 @@ prop |>
       byrow = TRUE
     )
   ) +
-  theme_bw(base_size = 12) +
+  theme_bw(base_family = "Arial", base_size = 10) +
   theme(
     strip.background = element_blank(),
 

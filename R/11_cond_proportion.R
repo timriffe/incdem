@@ -2,7 +2,7 @@ source("R/00_dependencies.R")
 source("R/01_functions.R")
 source("R/01_functions_extra.R")
 # Proportion of life lived with dementia at age 65 and 85 (a simple, policy-friendly metric)
-# TR: I interpret this as "upward-looking" at ages 65 and 85:
+# I interpret this as "upward-looking" at ages 65 and 85:
 
 # -------------------- #
 # model 1              #

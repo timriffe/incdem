@@ -49,13 +49,15 @@ prev <- hrs_to_fit_prepped |>
   ) |>
   dplyr::mutate(replicate = 1L, .before = 1)
 
+plan(multisession, workers = 10)
+
 probs_unadj <-
   haz_unadj |> 
   hazards_to_discrete(
     age_interval = 0.25,
     id_cols      = c("age", "female", "year"),
     n_cores      = 10,
-    parallel     = "mclapply")
+    parallel     = "future")
 
 e50_unadj <-
   probs_unadj |> 
@@ -135,6 +137,7 @@ haz_compare |>
   scale_y_log10() +
   geom_line(data = external_mort |> filter(year %in% c(2005,2019)) |> rename(haz=mx) |> mutate(adjusted = FALSE), color = "black")
 
+plan(multisession, workers = 10)
 probs_adj <-
   haz_adj |> 
   arrange(year,female,age, from,to) |> 
@@ -142,7 +145,7 @@ probs_adj <-
     age_interval = 0.25,
     id_cols      = c("age", "female", "year"),
     n_cores      = 10,
-    parallel     = "mclapply")
+    parallel     = "future")
 
 e50_adj <-
   probs_adj |> 
